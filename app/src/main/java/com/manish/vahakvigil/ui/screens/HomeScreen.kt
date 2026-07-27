@@ -1,4 +1,4 @@
-package com.manish.vahakvigil
+package com.manish.vahakvigil.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +29,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onStartMonitoringClick: () -> Unit = {},
     onEmergencyContactsClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
 ) {
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -108,6 +109,16 @@ fun HomeScreen(
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
+
+                OutlinedButton(
+                    onClick = onProfileClick,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Profile",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -139,7 +150,7 @@ private fun MonitoringStatusCard(
             )
 
             Text(
-                text = "🟢 OFF",
+                text = "OFF",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
