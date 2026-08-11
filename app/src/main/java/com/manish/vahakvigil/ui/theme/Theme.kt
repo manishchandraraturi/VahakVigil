@@ -59,7 +59,12 @@ data class VahakVigilColors(
     val primary: Color,
     val primaryContainer: Color,
     val success: Color,
-    val successContainer: Color
+    val successContainer: Color,
+    val cardHighlight: Color,
+    val cardShadow: Color,
+    val insetHighlight: Color,
+    val insetShadow: Color,
+    val motorcycleLine: Color
 )
 
 private val LightVahakColors = VahakVigilColors(
@@ -76,7 +81,12 @@ private val LightVahakColors = VahakVigilColors(
     primary = LightAccentBlue,
     primaryContainer = LightAccentBlueContainer,
     success = LightSuccess,
-    successContainer = LightSuccessContainer
+    successContainer = LightSuccessContainer,
+    cardHighlight = Color.White.copy(alpha = 0.84f),
+    cardShadow = Color(0xFFD8D1C8).copy(alpha = 0.56f),
+    insetHighlight = Color.White.copy(alpha = 0.82f),
+    insetShadow = Color(0xFFD9D1C7).copy(alpha = 0.48f),
+    motorcycleLine = Color(0xFF1F1F1F)
 )
 
 private val DarkVahakColors = VahakVigilColors(
@@ -95,7 +105,12 @@ private val DarkVahakColors = VahakVigilColors(
     primary = DarkAccentBlue,
     primaryContainer = DarkAccentBlueContainer,
     success = DarkSuccess,
-    successContainer = DarkSuccessContainer
+    successContainer = DarkSuccessContainer,
+    cardHighlight = Color.White.copy(alpha = 0.06f),
+    cardShadow = Color.Black.copy(alpha = 0.42f),
+    insetHighlight = Color.White.copy(alpha = 0.05f),
+    insetShadow = Color.Black.copy(alpha = 0.34f),
+    motorcycleLine = Color(0xFFF8F8F8)
 )
 
 private val LocalVahakVigilColors = staticCompositionLocalOf { LightVahakColors }
