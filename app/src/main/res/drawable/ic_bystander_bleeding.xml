@@ -1,0 +1,117 @@
+<!--
+  ~ Copyright (C) 2026 VahakVigil Project
+  ~ Licensed under CC0 1.0 Universal / Apache License 2.0.
+  ~ Public Domain / Permissive Open Source Emergency First Aid Pictogram.
+  ~
+  ~ Visual Description:
+  ~ High-contrast direct bleeding control pictogram. Shows an injured limb/wound with visible
+  ~ blood, covered by a thick compression cloth pad, with two hands applying firm, downward
+  ~ direct pressure reinforced by directional force arrows.
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="190dp"
+    android:viewportWidth="280"
+    android:viewportHeight="190">
+
+    <!-- Ground / table baseline -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M15,165 L265,165 C267,165 268,167 268,169 C268,171 267,173 265,173 L15,173 C13,173 12,171 12,169 C12,167 13,165 15,165 Z" />
+
+    <!-- ── INJURED LIMB / BODY SECTION ── -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M25,155 L255,155 C258,155 260,152 260,148 L260,132 C260,128 258,125 255,125 L25,125 C22,125 20,128 20,132 L20,148 C20,152 22,155 25,155 Z" />
+
+    <!-- ── VISIBLE BLOOD / WOUND AREA (Red #DC2626) ── -->
+    <!-- Blood pooling at base of wound -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M110,156 C105,156 95,158 92,161 C90,163 93,164 100,164 L180,164 C187,164 190,163 188,161 C185,158 175,156 170,156 Z" />
+
+    <!-- Blood droplets escaping wound edges -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M86,145 C86,140 92,135 92,145 C92,150 86,150 86,145 Z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M194,146 C194,141 200,136 200,146 C200,151 194,151 194,146 Z" />
+
+    <!-- ── THICK WHITE COMPRESSION PAD / CLOTH ── -->
+    <!-- Sterile pad / folded cloth over wound -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="2"
+        android:pathData="M98,122 L182,122 C186,122 190,126 190,130 L190,142 C190,146 186,150 182,150 L98,150 C94,150 90,146 90,142 L90,130 C90,126 94,122 98,122 Z" />
+    
+    <!-- Cloth weave / folding layers -->
+    <path
+        android:strokeColor="#CBD5E1"
+        android:strokeWidth="1.5"
+        android:pathData="M92,131 L188,131 M92,141 L188,141" />
+
+    <!-- ── TWO HANDS APPLYING FIRM DIRECT PRESSURE ── -->
+    <!-- Forearms descending from above (blue bystander sleeves) -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M106,30 L124,30 L130,90 L112,90 Z" />
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M156,30 L174,30 L168,90 L150,90 Z" />
+
+    <!-- Left Hand pressing flat on cloth -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:strokeColor="#64748B"
+        android:strokeWidth="2"
+        android:pathData="M112,90 L132,90 C136,90 138,94 138,98 L138,122 C138,125 135,127 131,127 L110,127 C106,127 104,124 104,120 L104,98 C104,94 107,90 112,90 Z" />
+
+    <!-- Right Hand pressing flat on cloth (overlapping for maximum force) -->
+    <path
+        android:fillColor="#F1F5F9"
+        android:strokeColor="#64748B"
+        android:strokeWidth="2"
+        android:pathData="M148,90 L168,90 C173,90 176,94 176,98 L176,122 C176,125 173,127 169,127 L148,127 C144,127 142,124 142,120 L142,98 C142,94 145,90 148,90 Z" />
+
+    <!-- Hand knuckles / finger compression lines -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M112,110 L130,110 M150,110 L168,110 M112,118 L130,118 M150,118 L168,118" />
+
+    <!-- ── DOWNWARD FORCE / PRESSURE ACTION ARROWS ── -->
+    <!-- Center Main Downward Force Arrow (Red #EF4444) -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M140,55 L132,55 L132,38 L148,38 L148,55 L140,55 Z" />
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M140,78 L124,56 L156,56 Z" />
+
+    <!-- Left Force Chevron -->
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M78,65 L88,80 L98,65" />
+
+    <!-- Right Force Chevron -->
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M182,65 L192,80 L202,65" />
+
+    <!-- Pressure Waves into Pad -->
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M84,120 C84,128 88,135 92,138 M196,120 C196,128 192,135 188,138" />
+
+</vector>

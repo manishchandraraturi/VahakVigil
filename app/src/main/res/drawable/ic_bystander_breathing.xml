@@ -1,0 +1,98 @@
+<!--
+  ~ Copyright (C) 2026 VahakVigil Project
+  ~ Licensed under CC0 1.0 Universal / Apache License 2.0.
+  ~ Public Domain / Permissive Open Source Emergency First Aid Pictogram.
+  ~
+  ~ Visual Description:
+  ~ High-contrast breathing assessment pictogram depicting the universal "Look, Listen & Feel"
+  ~ technique: bystander brings ear close to rider's nose/mouth to listen and feel breath, while
+  ~ looking directly along the chest line for rhythmic rise and fall indicated by green expansion arrows.
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="190dp"
+    android:viewportWidth="280"
+    android:viewportHeight="190">
+
+    <!-- Ground / road baseline -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M15,165 L265,165 C267,165 268,167 268,169 C268,171 267,173 265,173 L15,173 C13,173 12,171 12,169 C12,167 13,165 15,165 Z" />
+
+    <!-- ── RIDER (Lying on back, chest visible) ── -->
+    <!-- Rider body / torso -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M55,155 L160,155 C164,155 168,150 168,145 L168,138 C168,130 158,126 142,126 L65,126 C58,126 52,134 52,144 L52,155 Z" />
+
+    <!-- Rider Legs -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M15,158 L60,158 L60,144 L15,144 C12,144 10,147 10,151 C10,155 12,158 15,158 Z" />
+
+    <!-- Rider Head with open airway (slight tilt) -->
+    <path
+        android:fillColor="#475569"
+        android:pathData="M170,148 C170,135 180,126 194,126 C206,126 216,135 216,148 C216,156 210,162 198,162 L180,162 C173,162 170,156 170,148 Z" />
+
+    <!-- Face profile (nose, mouth open for airway check) -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M192,128 L200,128 C204,131 204,136 201,139 L194,139 Z" />
+
+    <!-- ── BYSTANDER (Look, Listen, Feel Posture) ── -->
+    <!-- Bystander body bent low over rider's chest/face -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M125,125 L145,82 C148,76 156,72 164,74 L185,80 C192,82 196,90 193,97 L175,130 Z" />
+
+    <!-- Bystander Head positioned with ear right at rider's mouth/nose -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M185,92 C185,82 193,74 204,74 C215,74 223,82 223,92 C223,102 215,110 204,110 C193,110 185,102 185,92 Z" />
+
+    <!-- Bystander Ear highlighted right by rider's mouth (Listening) -->
+    <path
+        android:strokeColor="#0284C7"
+        android:strokeWidth="2"
+        android:fillColor="#E2E8F0"
+        android:pathData="M198,90 C195,90 193,93 193,97 C193,101 195,103 198,103" />
+
+    <!-- Bystander Gaze line (Dotted sightline looking down at the chest) -->
+    <path
+        android:strokeColor="#0284C7"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M190,102 L145,120" />
+
+    <!-- ── UNIVERSAL BREATHING INDICATOR (Look, Listen, Feel) ── -->
+    <!-- Chest Rise/Fall Upward Action Arrows (Green #10B981) -->
+    <!-- Arrow 1 (Main Chest) -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M115,104 L102,118 L110,118 L110,130 L120,130 L120,118 L128,118 Z" />
+    <!-- Arrow 2 (Secondary Chest Wave) -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M85,108 L75,120 L81,120 L81,130 L89,130 L89,120 L95,120 Z" />
+
+    <!-- Airflow Wave at Mouth/Nose (Listen & Feel breath cue) -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M205,122 C214,118 214,108 224,106" />
+    <path
+        android:strokeColor="#34D399"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M202,115 C210,112 210,104 218,102" />
+
+    <!-- Pulse expansion contours on chest -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M98,96 C112,90 126,90 140,96" />
+
+</vector>

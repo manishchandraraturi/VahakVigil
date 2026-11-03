@@ -1,15 +1,35 @@
+```gitignore
+# Android / Gradle
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.gradle/
+build/
+app/build/
+.externalNativeBuild/
+.cxx/
+captures/
+
+# Local IDE files
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# Kotlin build cache
+.kotlin/
+
+# Local configuration and credentials
 local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# OS files
+.DS_Store
+```
+# Local build cache
+.kotlin/
+
+# Private documents
+VahakVigil Patent Draft.docx

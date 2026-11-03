@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "208659750236",
+    "project_id": "vahakvigil",
+    "storage_bucket": "vahakvigil.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:208659750236:android:a8421934aacf1cdf4a7599",
+        "android_client_info": {
+          "package_name": "com.manish.vahakvigil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCHZ9u1hx2SD5vxeID95fuH-Bvn37_INA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,100 @@
+<!--
+  ~ Copyright (C) 2026 VahakVigil Project
+  ~ Licensed under CC0 1.0 Universal / Apache License 2.0.
+  ~ Public Domain / Permissive Open Source Emergency First Aid Pictogram.
+  ~
+  ~ Visual Description:
+  ~ High-contrast roadside triage pictogram showing an injured fallen rider lying horizontally
+  ~ and a bystander kneeling beside them, placing a hand on the shoulder and speaking directly
+  ~ with sound waves and a universal speech question badge ("Can you hear me?").
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="190dp"
+    android:viewportWidth="280"
+    android:viewportHeight="190">
+
+    <!-- Ground / road baseline -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M15,165 L265,165 C267,165 268,167 268,169 C268,171 267,173 265,173 L15,173 C13,173 12,171 12,169 C12,167 13,165 15,165 Z" />
+
+    <!-- ── RIDER (Lying on ground facing up/right) ── -->
+    <!-- Rider body / jacket -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M60,155 L155,155 C160,155 165,150 165,145 L165,140 C165,135 160,132 150,132 L70,132 C62,132 55,138 55,146 L55,155 Z" />
+    
+    <!-- Rider legs extending left -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M20,158 L65,158 L65,144 L20,144 C17,144 15,147 15,151 C15,155 17,158 20,158 Z" />
+
+    <!-- Rider Helmet / Head resting flat on ground -->
+    <path
+        android:fillColor="#475569"
+        android:pathData="M165,148 C165,134 176,123 190,123 C204,123 215,134 215,148 C215,157 208,162 195,162 L175,162 C169,162 165,156 165,148 Z" />
+    
+    <!-- Helmet Visor (sky blue glass reflection) -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M192,130 C198,130 205,134 207,142 C205,145 198,148 190,148 L188,136 C188,132 190,130 192,130 Z" />
+
+    <!-- ── BYSTANDER (Kneeling, checking responsiveness) ── -->
+    <!-- Kneeling lower body and legs -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M110,165 L115,140 C116,134 122,130 128,130 L145,130 L155,165 Z" />
+
+    <!-- Bystander Torso / Jacket (leaning toward rider's head) -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M130,132 L150,88 C153,82 160,78 168,80 L188,86 C195,88 198,96 195,102 L175,136 Z" />
+
+    <!-- Bystander Head (bent forward listening & looking at rider) -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M192,68 C192,57 201,48 212,48 C223,48 232,57 232,68 C232,79 223,88 212,88 C201,88 192,79 192,68 Z" />
+
+    <!-- Bystander Arm & Hand (resting gently on rider's shoulder to check responsiveness) -->
+    <path
+        android:strokeColor="#0284C7"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M170,95 L155,115 L145,132" />
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M140,134 C140,129 146,126 151,128 C155,130 156,136 152,139 C148,142 140,139 140,134 Z" />
+
+    <!-- Shoulder touch feedback vibration waves -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M136,122 C132,126 132,134 136,138" />
+
+    <!-- ── UNIVERSAL VOICE / SPEECH CUE: "CAN YOU HEAR ME?" ── -->
+    <!-- Speech bubble pointing from bystander's mouth toward rider's ear -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M210,18 C228,18 244,28 244,42 C244,52 234,60 220,63 L216,73 L208,64 C201,63 196,59 193,54 C198,53 204,49 207,43 C208,35 209,26 210,18 Z" />
+
+    <!-- Sound wave radiating arcs from mouth toward ear -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M192,96 C186,104 186,114 192,122" />
+    <path
+        android:strokeColor="#0284C7"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M185,99 C178,107 178,118 185,125" />
+
+    <!-- Bold question badge inside / near speech bubble -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M226,30 C226,26 222,23 218,23 C213,23 210,26 210,29 L213,29 C213,27 215,25 218,25 C220,25 223,27 223,29 C223,31 221,33 219,34 C217,36 216,38 216,41 L219,41 C219,39 220,38 221,36 C224,34 226,32 226,30 Z M216,45 L220,45 L220,48 L216,48 Z" />
+
+</vector>

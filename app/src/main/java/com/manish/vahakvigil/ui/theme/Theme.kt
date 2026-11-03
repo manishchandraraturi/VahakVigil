@@ -33,9 +33,9 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = LightAccentBlue,
+    primary = LightAccentRed,
     onPrimary = Color.White,
-    primaryContainer = LightAccentBlueContainer,
+    primaryContainer = LightAccentRedContainer,
     onPrimaryContainer = LightText,
     secondary = LightSuccess,
     onSecondary = Color.White,
@@ -70,7 +70,9 @@ data class VahakVigilColors(
 private val LightVahakColors = VahakVigilColors(
     backgroundStops = listOf(
         0.00f to LightGradientTop,
-        0.48f to LightGradientMiddle,
+        0.24f to LightGradientUpperMiddle,
+        0.50f to LightGradientCenter,
+        0.74f to LightGradientLower,
         1.00f to LightGradientBottom
     ),
     card = LightCard,
@@ -78,15 +80,15 @@ private val LightVahakColors = VahakVigilColors(
     headingText = LightText,
     mutedText = LightMutedText,
     divider = LightDivider,
-    primary = LightAccentBlue,
-    primaryContainer = LightAccentBlueContainer,
+    primary = LightAccentRed,
+    primaryContainer = LightAccentRedContainer,
     success = LightSuccess,
     successContainer = LightSuccessContainer,
-    cardHighlight = Color.White.copy(alpha = 0.84f),
-    cardShadow = Color(0xFFD8D1C8).copy(alpha = 0.56f),
-    insetHighlight = Color.White.copy(alpha = 0.82f),
-    insetShadow = Color(0xFFD9D1C7).copy(alpha = 0.48f),
-    motorcycleLine = Color(0xFF1F1F1F)
+    cardHighlight = Color.White.copy(alpha = 0.90f),
+    cardShadow = Color(0xFF64748B).copy(alpha = 0.16f),
+    insetHighlight = Color.White.copy(alpha = 0.85f),
+    insetShadow = Color(0xFF64748B).copy(alpha = 0.20f),
+    motorcycleLine = Color(0xFF1E293B)
 )
 
 private val DarkVahakColors = VahakVigilColors(

@@ -11,6 +11,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -58,6 +60,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -148,7 +154,7 @@ fun AppCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val lift by animateDpAsState(
-        targetValue = if (isPressed) 4.dp else 11.dp,
+        targetValue = if (isPressed) 2.dp else 5.dp,
         animationSpec = tween(durationMillis = 220),
         label = "card_lift"
     )
@@ -178,6 +184,7 @@ fun AppCard(
                 )
             }
             .background(colors.card, RoundedCornerShape(cornerRadius))
+            .border(1.dp, colors.divider.copy(alpha = 0.58f), RoundedCornerShape(cornerRadius))
             .then(
                 if (onClick == null) {
                     Modifier
@@ -199,7 +206,8 @@ fun PrimaryButton(
     text: String,
     subtitle: String? = null,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false
 ) {
     val colors = MaterialTheme.vahakColors
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -213,13 +221,14 @@ fun PrimaryButton(
 
     Surface(
         modifier = modifier
-            .height(if (subtitle == null) 58.dp else 68.dp)
+            .height(if (prominent || subtitle != null) 72.dp else 64.dp)
             .scale(scale)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
-            ),
+            )
+            .semantics { role = Role.Button },
         color = colors.primary,
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 0.dp
@@ -234,8 +243,8 @@ fun PrimaryButton(
                 Text(
                     text = text,
                     color = onPrimary,
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
+                    fontSize = if (prominent) 20.sp else 18.sp,
+                    lineHeight = if (prominent) 24.sp else 22.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.sp
                 )
@@ -278,42 +287,42 @@ fun SectionTitle(
 }
 
 @Composable
-fun StatusCard(modifier: Modifier = Modifier) {
+fun StatusCard(
+    modifier: Modifier = Modifier,
+    title: String = "All systems ready",
+    subtitle: String = "Crash sensors and GPS are active",
+    isActive: Boolean = false,
+    isReady: Boolean = true
+) {
     val colors = MaterialTheme.vahakColors
-    val pulseTransition = rememberInfiniteTransition(label = "status_pulse_transition")
-    val pulse by pulseTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "status_pulse"
-    )
+    val indicatorColor = when {
+        isActive -> colors.primary
+        isReady -> colors.success
+        else -> Color(0xFFD49A49)
+    }
 
     AppCard(
-        modifier = modifier.height(88.dp),
+        modifier = modifier.heightIn(min = 88.dp),
         cornerRadius = 28.dp
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(if (isReady) colors.successContainer else indicatorColor.copy(alpha = 0.14f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size((14 + 10 * pulse).dp)
-                        .background(colors.success.copy(alpha = 0.18f * (1f - pulse)), CircleShape)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .background(colors.success, CircleShape)
+                Text(
+                    text = if (isReady) "✓" else "!",
+                    color = indicatorColor,
+                    fontSize = 18.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -321,18 +330,20 @@ fun StatusCard(modifier: Modifier = Modifier) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "All systems ready",
+                    text = title,
                     color = colors.headingText,
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 19.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "Crash sensors and GPS are active",
+                    text = subtitle,
                     color = colors.mutedText,
                     fontSize = 13.sp,
-                    lineHeight = 17.sp
+                    lineHeight = 17.sp,
+                    maxLines = 2
                 )
             }
         }
@@ -353,27 +364,29 @@ fun QuickAccessCard(
         modifier = modifier
             .fillMaxHeight()
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 18.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        CircleIcon(icon = icon)
+        CircleIcon(icon = icon, modifier = Modifier.size(36.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(9.dp))
 
         Text(
             text = title,
             color = colors.headingText,
-            fontSize = 17.sp,
-            lineHeight = 21.sp,
+            fontSize = 15.sp,
+            lineHeight = 19.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.sp
+            letterSpacing = 0.sp,
+            maxLines = 1
         )
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = subtitle,
             color = colors.mutedText,
-            fontSize = 13.sp,
-            lineHeight = 17.sp
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            maxLines = 2
         )
     }
 }
@@ -505,89 +518,96 @@ fun ThemeToggle(
 ) {
     val progress by animateFloatAsState(
         targetValue = if (isDarkTheme) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f),
         label = "theme_toggle_progress"
     )
-    val trackColor by animateColorAsState(
-        targetValue = if (isDarkTheme) Color(0xFF211426) else Color(0xFFEAF3FF),
-        animationSpec = tween(durationMillis = 260),
-        label = "theme_toggle_track"
+    val trackBg by animateColorAsState(
+        targetValue = if (isDarkTheme) Color(0xFF2B1B30) else Color(0xFFE6EBEE),
+        animationSpec = tween(durationMillis = 200),
+        label = "theme_toggle_track_bg"
+    )
+    val trackBorder by animateColorAsState(
+        targetValue = if (isDarkTheme) Color(0xFF5A3666) else Color(0xFFCAD3D8),
+        animationSpec = tween(durationMillis = 200),
+        label = "theme_toggle_track_border"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (isDarkTheme) Color(0xFFF3EDF5) else Color(0xFFD97724),
+        animationSpec = tween(durationMillis = 200),
+        label = "theme_toggle_thumb_color"
     )
     val density = LocalDensity.current
-    val width = 64.dp
-    val height = 36.dp
-    val thumbSize = 28.dp
 
-    Canvas(
+    val trackWidth = 44.dp
+    val trackHeight = 24.dp
+    val thumbDiameter = 18.dp
+
+    val description = androidx.compose.ui.res.stringResource(
+        if (isDarkTheme) com.manish.vahakvigil.R.string.theme_switch_to_light
+        else com.manish.vahakvigil.R.string.theme_switch_to_dark
+    )
+    Box(
         modifier = modifier
-            .size(width = width, height = height)
+            .size(width = 48.dp, height = 48.dp)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) {
                 onThemeChange(!isDarkTheme)
             }
+            .semantics {
+                role = Role.Switch
+                contentDescription = description
+            },
+        contentAlignment = Alignment.Center
     ) {
-        val radius = size.height / 2f
-        drawRoundRect(
-            color = trackColor,
-            cornerRadius = CornerRadius(radius, radius)
-        )
-
-        val cloudAlpha = 1f - progress
-        val starAlpha = progress
-        drawCircle(
-            color = Color.White.copy(alpha = 0.70f * cloudAlpha),
-            radius = size.height * 0.12f,
-            center = Offset(size.width * 0.68f, size.height * 0.64f)
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.58f * cloudAlpha),
-            radius = size.height * 0.09f,
-            center = Offset(size.width * 0.78f, size.height * 0.66f)
-        )
-
-        listOf(
-            Offset(size.width * 0.62f, size.height * 0.28f),
-            Offset(size.width * 0.77f, size.height * 0.36f),
-            Offset(size.width * 0.70f, size.height * 0.72f)
-        ).forEachIndexed { index, point ->
-            drawCircle(
-                color = Color.White.copy(alpha = starAlpha * (0.72f - index * 0.12f)),
-                radius = size.height * 0.035f,
-                center = point
+        Canvas(modifier = Modifier.size(width = trackWidth, height = trackHeight)) {
+            val corner = size.height / 2f
+            // Track background
+            drawRoundRect(
+                color = trackBg,
+                cornerRadius = CornerRadius(corner, corner)
             )
-        }
-
-        val thumbPx = with(density) { thumbSize.toPx() }
-        val travel = size.width - thumbPx - 4.dp.toPx()
-        val cx = 2.dp.toPx() + thumbPx / 2f + travel * progress
-        val cy = size.height / 2f
-        val thumbColor = if (isDarkTheme) Color(0xFFF8F8F8) else Color(0xFFFFC857)
-        drawCircle(thumbColor, radius = thumbPx / 2f, center = Offset(cx, cy))
-        if (isDarkTheme) {
-            drawCircle(
-                color = trackColor,
-                radius = thumbPx * 0.33f,
-                center = Offset(cx + thumbPx * 0.18f, cy - thumbPx * 0.15f)
+            // Track outline
+            drawRoundRect(
+                color = trackBorder,
+                cornerRadius = CornerRadius(corner, corner),
+                style = Stroke(width = 1.dp.toPx())
             )
-        } else {
-            repeat(8) { index ->
-                val angle = Math.toRadians((index * 45).toDouble())
-                val start = Offset(
-                    x = cx + kotlin.math.cos(angle).toFloat() * thumbPx * 0.36f,
-                    y = cy + kotlin.math.sin(angle).toFloat() * thumbPx * 0.36f
+
+            val thumbPx = with(density) { thumbDiameter.toPx() }
+            val paddingPx = 3.dp.toPx()
+            val maxTravel = size.width - thumbPx - (paddingPx * 2f)
+            val cx = paddingPx + (thumbPx / 2f) + (maxTravel * progress)
+            val cy = size.height / 2f
+
+            // Thumb shadow
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.15f),
+                radius = (thumbPx / 2f) + 0.8.dp.toPx(),
+                center = Offset(cx, cy + 0.8.dp.toPx())
+            )
+            // Thumb body
+            drawCircle(
+                color = thumbColor,
+                radius = thumbPx / 2f,
+                center = Offset(cx, cy)
+            )
+
+            // Minimalist icon accent inside thumb
+            if (progress > 0.5f) {
+                // Crescent moon cut-out
+                drawCircle(
+                    color = trackBg,
+                    radius = thumbPx * 0.34f,
+                    center = Offset(cx + thumbPx * 0.14f, cy - thumbPx * 0.10f)
                 )
-                val end = Offset(
-                    x = cx + kotlin.math.cos(angle).toFloat() * thumbPx * 0.47f,
-                    y = cy + kotlin.math.sin(angle).toFloat() * thumbPx * 0.47f
-                )
-                drawLine(
-                    color = Color(0xFFFFA928),
-                    start = start,
-                    end = end,
-                    strokeWidth = 1.4.dp.toPx(),
-                    cap = StrokeCap.Round
+            } else {
+                // Sun center dot
+                drawCircle(
+                    color = Color(0xFFFFF7ED),
+                    radius = thumbPx * 0.20f,
+                    center = Offset(cx, cy)
                 )
             }
         }
@@ -595,87 +615,8 @@ fun ThemeToggle(
 }
 
 @Composable
-fun MotorcycleLineArt(
-    modifier: Modifier = Modifier
-) {
-    val colors = MaterialTheme.vahakColors
-
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val line = colors.motorcycleLine
-        val strokeWidth = (w * 0.006f).coerceIn(2.1f, 3.4f)
-        val stroke = Stroke(
-            width = strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
-        )
-        val rear = Offset(w * 0.28f, h * 0.72f)
-        val front = Offset(w * 0.74f, h * 0.72f)
-        val wheel = w * 0.105f
-
-        drawLine(
-            color = line,
-            start = Offset(-w * 0.18f, h * 0.84f),
-            end = Offset(w * 1.18f, h * 0.84f),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round
-        )
-        drawCircle(line, radius = wheel, center = rear, style = stroke)
-        drawCircle(line, radius = wheel * 0.68f, center = rear, style = stroke)
-        drawCircle(line, radius = wheel, center = front, style = stroke)
-        drawCircle(line, radius = wheel * 0.68f, center = front, style = stroke)
-        drawCircle(line, radius = wheel * 0.16f, center = front, style = stroke)
-
-        val body = Path().apply {
-            moveTo(w * 0.13f, h * 0.70f)
-            cubicTo(w * 0.18f, h * 0.49f, w * 0.31f, h * 0.48f, w * 0.37f, h * 0.58f)
-            cubicTo(w * 0.42f, h * 0.42f, w * 0.52f, h * 0.34f, w * 0.62f, h * 0.40f)
-            cubicTo(w * 0.58f, h * 0.50f, w * 0.50f, h * 0.54f, w * 0.39f, h * 0.58f)
-            cubicTo(w * 0.36f, h * 0.66f, w * 0.33f, h * 0.72f, w * 0.28f, h * 0.76f)
-            cubicTo(w * 0.39f, h * 0.79f, w * 0.55f, h * 0.78f, w * 0.67f, h * 0.70f)
-            cubicTo(w * 0.71f, h * 0.63f, w * 0.74f, h * 0.57f, w * 0.78f, h * 0.53f)
-        }
-        drawPath(body, line, style = stroke)
-
-        val seat = Path().apply {
-            moveTo(w * 0.25f, h * 0.50f)
-            cubicTo(w * 0.30f, h * 0.60f, w * 0.36f, h * 0.60f, w * 0.42f, h * 0.48f)
-            cubicTo(w * 0.34f, h * 0.52f, w * 0.29f, h * 0.50f, w * 0.25f, h * 0.50f)
-        }
-        drawPath(seat, line, style = stroke)
-
-        val tank = Path().apply {
-            moveTo(w * 0.45f, h * 0.47f)
-            cubicTo(w * 0.48f, h * 0.35f, w * 0.62f, h * 0.34f, w * 0.66f, h * 0.46f)
-            cubicTo(w * 0.62f, h * 0.52f, w * 0.53f, h * 0.55f, w * 0.45f, h * 0.47f)
-        }
-        drawPath(tank, line, style = stroke)
-
-        val engine = Path().apply {
-            moveTo(w * 0.48f, h * 0.61f)
-            cubicTo(w * 0.53f, h * 0.53f, w * 0.60f, h * 0.57f, w * 0.60f, h * 0.66f)
-            cubicTo(w * 0.58f, h * 0.76f, w * 0.47f, h * 0.77f, w * 0.45f, h * 0.68f)
-            cubicTo(w * 0.43f, h * 0.63f, w * 0.45f, h * 0.60f, w * 0.48f, h * 0.61f)
-        }
-        drawPath(engine, line, style = stroke)
-        drawLine(line, Offset(w * 0.36f, h * 0.69f), Offset(w * 0.58f, h * 0.69f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.58f, h * 0.69f), Offset(w * 0.66f, h * 0.51f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.66f, h * 0.51f), Offset(w * 0.74f, h * 0.72f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.66f, h * 0.51f), Offset(w * 0.70f, h * 0.35f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.70f, h * 0.35f), Offset(w * 0.77f, h * 0.47f), strokeWidth, StrokeCap.Round)
-
-        val handle = Path().apply {
-            moveTo(w * 0.67f, h * 0.34f)
-            cubicTo(w * 0.64f, h * 0.29f, w * 0.60f, h * 0.28f, w * 0.57f, h * 0.31f)
-            cubicTo(w * 0.63f, h * 0.32f, w * 0.66f, h * 0.30f, w * 0.68f, h * 0.24f)
-            cubicTo(w * 0.65f, h * 0.19f, w * 0.69f, h * 0.14f, w * 0.73f, h * 0.18f)
-        }
-        drawPath(handle, line, style = stroke)
-        drawLine(line, Offset(w * 0.70f, h * 0.35f), Offset(w * 0.77f, h * 0.32f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.80f, h * 0.48f), Offset(w * 0.88f, h * 0.50f), strokeWidth, StrokeCap.Round)
-        drawLine(line, Offset(w * 0.14f, h * 0.74f), Offset(w * 0.38f, h * 0.74f), strokeWidth, StrokeCap.Round)
-    }
+fun MotorcycleLineArt(modifier: Modifier = Modifier) {
+    ProgressiveMotorcycleLineArt(modifier = modifier, progress = 1f)
 }
 
 @Composable

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 68 42" width="1024" height="632">
+  <g id="foreground">
+    <!-- Ground line -->
+    <path
+      fill="none"
+      stroke="#F8F8F8"
+      stroke-opacity="0.4"
+      stroke-width="2"
+      stroke-linecap="round"
+      d="M24,78 L84,78" />
+    <!-- Rear wheel -->
+    <path
+      fill="none"
+      stroke="#F8F8F8"
+      stroke-width="2.5"
+      d="M37,68 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <!-- Front wheel -->
+    <path
+      fill="none"
+      stroke="#F8F8F8"
+      stroke-width="2.5"
+      d="M71,68 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <!-- Motorcycle chassis, tank, seat, and fork silhouette -->
+    <path
+      fill="none"
+      stroke="#F8F8F8"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M71,68 L64,48 L59,45 M64,48 C60,44 54,43 50,47 C46,50 43,53 43,53 C39,52 35,49 32,46 L30,48 C34,53 38,58 45,58 L71,68 M45,58 L37,68" />
+  </g>
+</svg>

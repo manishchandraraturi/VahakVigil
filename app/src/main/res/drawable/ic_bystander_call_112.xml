@@ -1,0 +1,69 @@
+<!--
+  ~ Copyright (C) 2026 VahakVigil Project
+  ~ Licensed under CC0 1.0 Universal / Apache License 2.0.
+  ~ Public Domain / Permissive Open Source Emergency First Aid Pictogram.
+  ~
+  ~ Visual Description:
+  ~ High-contrast emergency dialer emblem. Features a bold white telephone receiver with
+  ~ sound arcs, medical cross emblem, and bold "112" emergency numerals.
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="190dp"
+    android:viewportWidth="280"
+    android:viewportHeight="190">
+
+    <!-- Emergency Shield Background Container -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M140,20 L195,40 C195,95 172,135 140,155 C108,135 85,95 85,40 Z" />
+
+    <!-- Inner Shield Border Highlight -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:pathData="M140,28 L187,45 C187,92 167,126 140,144 C113,126 93,92 93,45 Z" />
+
+    <!-- ── MEDICAL FIRST-AID CROSS ── -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M133,52 L147,52 L147,68 L163,68 L163,82 L147,82 L147,98 L133,98 L133,82 L117,82 L117,68 L133,68 Z" />
+
+    <!-- ── EMERGENCY PHONE RECEIVER ── -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M125,108 C120,108 116,112 116,117 C116,128 125,137 136,137 C141,137 145,133 145,128 L140,121 C139,119 135,119 133,121 L131,123 C127,120 124,117 121,113 L123,111 C125,109 125,105 123,104 Z" />
+
+    <!-- Sound Radiating Waves (Left) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M65,70 C55,85 55,105 65,120" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M50,60 C35,82 35,112 50,132" />
+
+    <!-- Sound Radiating Waves (Right) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M215,70 C225,85 225,105 215,120" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M230,60 C245,82 245,112 230,132" />
+
+    <!-- Pulsing ring base -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M140,162m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M138,157 L142,157 L142,167 L138,167 Z M135,160 L145,160 L145,164 L135,164 Z" />
+
+</vector>
