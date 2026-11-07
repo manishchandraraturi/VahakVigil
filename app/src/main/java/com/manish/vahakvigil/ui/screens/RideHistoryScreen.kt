@@ -20,6 +20,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,8 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.manish.vahakvigil.R
 import com.manish.vahakvigil.domain.model.RideSession
 import com.manish.vahakvigil.domain.model.RideSessionStatus
+import com.manish.vahakvigil.domain.export.SensorCsvExporter
+import com.manish.vahakvigil.ui.screens.ridehistory.SensorCsvExportStatus
 import com.manish.vahakvigil.ui.components.AppCard
 import com.manish.vahakvigil.ui.components.AppIcon
 import com.manish.vahakvigil.ui.components.AppScreen
@@ -135,6 +139,10 @@ private fun RideSessionCard(session: RideSession, onClick: () -> Unit, onDelete:
 @Composable
 fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClick: () -> Unit, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null) viewModel.reportSensorCsvPickerCancelled()
+        else viewModel.exportSensorCsv(rideId, uri.toString())
+    }
     LaunchedEffect(rideId) { viewModel.loadDetail(rideId) }
     AppScreen(modifier = modifier) {
         AppTopBar(title = androidx.compose.ui.res.stringResource(R.string.ride_detail_title), onBackClick = onBackClick)
@@ -157,6 +165,92 @@ fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClic
                         androidx.compose.ui.res.stringResource(R.string.ride_maximum_speed) to (session.maximumSpeedMetersPerSecond?.let { String.format(Locale.getDefault(), "%.1f km/h", it * 3.6) } ?: androidx.compose.ui.res.stringResource(R.string.ride_metric_unavailable))
                     )
                 )
+                Spacer(Modifier.height(12.dp))
+                AppCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_title),
+                            color = MaterialTheme.vahakColors.headingText,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_description),
+                            color = MaterialTheme.vahakColors.mutedText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                        val isExporting = state.sensorCsvExportStatus == SensorCsvExportStatus.RUNNING
+                        androidx.compose.material3.Button(
+                            onClick = { exportLauncher.launch(SensorCsvExporter.suggestedFilename(rideId)) },
+                            enabled = (state.sensorEventCount ?: 0L) > 0L && !isExporting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_action))
+                        }
+                        when {
+                            state.sensorEventCount == null -> Text(
+                                androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_count_unavailable),
+                                color = MaterialTheme.vahakColors.mutedText,
+                                fontSize = 12.sp
+                            )
+                            state.sensorEventCount == 0L -> Text(
+                                androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_empty),
+                                color = MaterialTheme.vahakColors.mutedText,
+                                fontSize = 12.sp
+                            )
+                            isExporting -> {
+                                val progress = state.sensorCsvProgress
+                                if (progress != null) {
+                                    val fraction = if (progress.totalRows > 0L) {
+                                        (progress.writtenRows.toFloat() / progress.totalRows).coerceIn(0f, 1f)
+                                    } else 0f
+                                    androidx.compose.material3.LinearProgressIndicator(
+                                        progress = { fraction },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        androidx.compose.ui.res.stringResource(
+                                            R.string.ride_sensor_export_progress,
+                                            progress.writtenRows,
+                                            progress.totalRows
+                                        ),
+                                        color = MaterialTheme.vahakColors.mutedText,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                androidx.compose.material3.TextButton(onClick = viewModel::cancelSensorCsvExport) {
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_cancel))
+                                }
+                            }
+                            state.sensorCsvExportStatus == SensorCsvExportStatus.SUCCEEDED -> Text(
+                                androidx.compose.ui.res.stringResource(
+                                    R.string.ride_sensor_export_success,
+                                    state.sensorCsvProgress?.writtenRows ?: 0L
+                                ),
+                                color = MaterialTheme.vahakColors.primary,
+                                fontSize = 12.sp
+                            )
+                            state.sensorCsvExportStatus == SensorCsvExportStatus.EMPTY -> Text(
+                                androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_empty),
+                                color = MaterialTheme.vahakColors.mutedText,
+                                fontSize = 12.sp
+                            )
+                            state.sensorCsvExportStatus == SensorCsvExportStatus.FAILED -> Text(
+                                listOfNotNull(
+                                    androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_failed),
+                                    state.sensorCsvError
+                                ).joinToString(" "),
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                            state.sensorCsvExportStatus == SensorCsvExportStatus.CANCELLED -> Text(
+                                androidx.compose.ui.res.stringResource(R.string.ride_sensor_export_cancelled),
+                                color = MaterialTheme.vahakColors.mutedText,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
                 if (state.selectedPoints.isEmpty()) Text(androidx.compose.ui.res.stringResource(R.string.ride_no_gps_points), color = MaterialTheme.vahakColors.mutedText)
             }
         }

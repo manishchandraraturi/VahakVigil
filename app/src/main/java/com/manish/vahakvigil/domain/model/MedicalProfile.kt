@@ -16,4 +16,9 @@ data class MedicalProfile(
     val height: String = "",
     val weight: String = "",
     val notes: String = ""
-)
+) {
+    /** A display name alone is not meaningful emergency medical information. */
+    val hasMeaningfulEmergencyInformation: Boolean
+        get() = listOf(age, bloodGroup, conditions, allergies, medications, height, weight, notes)
+            .any { it.isNotBlank() }
+}

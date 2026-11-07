@@ -195,6 +195,14 @@ fun VahakVigilNavHost(
             )
         }
 
+        composable(Screen.EmergencySimulation.route) {
+            val simulationViewModel: com.manish.vahakvigil.ui.screens.simulation.EmergencySimulationViewModel = viewModel()
+            com.manish.vahakvigil.ui.screens.simulation.EmergencySimulationScreen(
+                viewModel = simulationViewModel,
+                onExit = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.EmergencyContacts.route) {
             val app = LocalContext.current.applicationContext as VahakVigilApp
             val contactsViewModel: EmergencyContactsViewModel = viewModel(
@@ -259,7 +267,8 @@ fun VahakVigilNavHost(
                 onLanguageChanged = { activity?.recreate() },
                 onReadinessClick = { navController.navigate(Screen.Readiness.route) },
                 onContactsClick = { navController.navigate(Screen.EmergencyContacts.route) },
-                onMedicalClick = { navController.navigate(Screen.MedicalProfile.route) }
+                onMedicalClick = { navController.navigate(Screen.MedicalProfile.route) },
+                onEmergencySimulationClick = { navController.navigate(Screen.EmergencySimulation.route) }
             )
         }
 
@@ -268,8 +277,7 @@ fun VahakVigilNavHost(
                 app = app,
                 onBack = { navController.popBackStack() },
                 onContacts = { navController.navigate(Screen.EmergencyContacts.route) },
-                onMedical = { navController.navigate(Screen.MedicalProfile.route) },
-                onSettings = { navController.navigate(Screen.Settings.route) }
+                onMedical = { navController.navigate(Screen.MedicalProfile.route) }
             )
         }
 
@@ -292,7 +300,10 @@ fun VahakVigilNavHost(
 
         composable(Screen.RideHistory.route) {
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
-                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(app.rideSessionRepository)
+                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
+                    app.rideSessionRepository,
+                    app.sensorCsvDocumentExporter
+                )
             )
             RideHistoryScreen(
                 viewModel = rideHistoryViewModel,
@@ -304,7 +315,10 @@ fun VahakVigilNavHost(
 
         composable(Screen.RideCompletion.route) {
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
-                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(app.rideSessionRepository)
+                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
+                    app.rideSessionRepository,
+                    app.sensorCsvDocumentExporter
+                )
             )
             com.manish.vahakvigil.ui.screens.RideCompletionScreen(
                 viewModel = rideHistoryViewModel,
@@ -326,7 +340,10 @@ fun VahakVigilNavHost(
             arguments = listOf(navArgument(Screen.RideDetail.ARG_SESSION_ID) { type = NavType.StringType })
         ) { backStackEntry ->
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
-                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(app.rideSessionRepository)
+                factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
+                    app.rideSessionRepository,
+                    app.sensorCsvDocumentExporter
+                )
             )
             RideDetailScreen(
                 viewModel = rideHistoryViewModel,

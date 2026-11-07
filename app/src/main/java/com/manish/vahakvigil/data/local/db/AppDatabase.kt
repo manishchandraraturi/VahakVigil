@@ -10,11 +10,13 @@ import com.manish.vahakvigil.data.local.db.dao.ContactDao
 import com.manish.vahakvigil.data.local.db.dao.MedicalProfileDao
 import com.manish.vahakvigil.data.local.db.dao.RideSessionDao
 import com.manish.vahakvigil.data.local.db.dao.EmergencyIncidentDao
+import com.manish.vahakvigil.data.local.db.dao.SensorEventDao
 import com.manish.vahakvigil.data.local.db.entity.ContactEntity
 import com.manish.vahakvigil.data.local.db.entity.MedicalProfileEntity
 import com.manish.vahakvigil.data.local.db.entity.RideSessionEntity
 import com.manish.vahakvigil.data.local.db.entity.RideSessionPointEntity
 import com.manish.vahakvigil.data.local.db.entity.EmergencyIncidentEntity
+import com.manish.vahakvigil.data.local.db.entity.SensorEventEntity
 
 /**
  * Main Room database definition for VahakVigil.
@@ -29,9 +31,10 @@ import com.manish.vahakvigil.data.local.db.entity.EmergencyIncidentEntity
         ContactEntity::class,
         RideSessionEntity::class,
         RideSessionPointEntity::class,
-        EmergencyIncidentEntity::class
+        EmergencyIncidentEntity::class,
+        SensorEventEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun rideSessionDao(): RideSessionDao
     abstract fun emergencyIncidentDao(): EmergencyIncidentDao
+    abstract fun sensorEventDao(): SensorEventDao
 
     companion object {
         private const val DATABASE_NAME = "vahak_vigil.db"
@@ -70,6 +74,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sensor_events` (" +
+                        "`eventId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`sessionId` TEXT NOT NULL, " +
+                        "`sensorType` TEXT NOT NULL, " +
+                        "`timestampNanos` INTEGER NOT NULL, " +
+                        "`timestampEpochMillis` INTEGER NOT NULL, " +
+                        "`x` REAL NOT NULL, " +
+                        "`y` REAL NOT NULL, " +
+                        "`z` REAL NOT NULL, " +
+                        "`accuracy` INTEGER NOT NULL, " +
+                        "FOREIGN KEY(`sessionId`) REFERENCES `ride_sessions`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_sensor_events_sessionId_timestampNanos` " +
+                        "ON `sensor_events` (`sessionId`, `timestampNanos`)"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -80,7 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
                 .also { instance = it }
             }

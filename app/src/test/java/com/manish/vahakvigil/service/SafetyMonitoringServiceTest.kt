@@ -11,7 +11,20 @@ import com.manish.vahakvigil.domain.model.MotionDetectionConfig
 import com.manish.vahakvigil.domain.model.PostImpactMotionConfig
 import com.manish.vahakvigil.domain.model.SensorCapabilities
 import com.manish.vahakvigil.domain.model.SensorReading
+import com.manish.vahakvigil.domain.model.RawSensorEvent
+import com.manish.vahakvigil.domain.model.RawSensorType
+import com.manish.vahakvigil.domain.model.RideSession
+import com.manish.vahakvigil.domain.model.RideSessionPoint
+import com.manish.vahakvigil.domain.model.RideSessionStatus
+import com.manish.vahakvigil.domain.model.RecordedSensorEvent
+import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 import com.manish.vahakvigil.domain.pipeline.CrashDetectionPipeline
+import com.manish.vahakvigil.domain.repository.RideSessionRepository
+import com.manish.vahakvigil.domain.repository.SensorEventRepository
+import com.manish.vahakvigil.domain.location.RideSessionRecorder
+import com.manish.vahakvigil.data.sensor.RawSensorEventSource
+import com.manish.vahakvigil.data.sensor.SensorSessionRecorder
 import com.manish.vahakvigil.sensor.FakeSensorDataSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -19,6 +32,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -116,6 +136,8 @@ class SafetyMonitoringServiceTest {
         SafetyMonitoringService.testFeedbackController = null
         SafetyMonitoringService.testWakeLockHandle = null
         SafetyMonitoringService.testServiceDispatcher = null
+        SafetyMonitoringService.testRideSessionRecorder = null
+        SafetyMonitoringService.testSensorSessionRecorder = null
     }
 
     @Test
@@ -160,6 +182,69 @@ class SafetyMonitoringServiceTest {
         assertTrue(sensorRepository.isMonitoring.value)
         assertTrue(fakeDataSource.isListening)
         assertTrue(pipeline.isRunning)
+    }
+
+    @Test
+    fun sessionStop_flushesSensorEventsBeforeFinishingRideAndStartsSafetyImmediately() {
+        val operations = mutableListOf<String>()
+        val rideStore = RecordingRideSessionStore(operations)
+        val source = TestRawSensorSource()
+        val sensorEventRepository = RecordingSensorEventRepository(operations)
+        val rideRecorder = RideSessionRecorder(rideStore, timeProvider = { 2_000L })
+        val sensorRecorder = SensorSessionRecorder(
+            source = source,
+            sensorEventRepository = sensorEventRepository,
+            rideSessionRepository = rideStore,
+            batchSize = 64,
+            retryDelayMillis = 0L,
+            ioDispatcher = Dispatchers.Unconfined,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        )
+        SafetyMonitoringService.testRideSessionRecorder = rideRecorder
+        SafetyMonitoringService.testSensorSessionRecorder = sensorRecorder
+
+        service.onServiceStarted()
+        assertTrue("Crash monitoring starts before asynchronous persistence", pipeline.isRunning)
+        service.onServiceDestroyed()
+        val restartedService = SafetyMonitoringService()
+        service = restartedService
+        restartedService.onServiceStarted()
+        assertTrue("START_STICKY recreation keeps monitoring", pipeline.isRunning)
+        assertEquals("Recorder remains application-scoped with one collector", 1, source.collectorStartCount)
+        source.emit(
+            RawSensorEvent(RawSensorType.ACCELEROMETER, 10L, 1L, 1f, 2f, 3f, 3)
+        )
+        service.onServiceStopped()
+
+        assertEquals(listOf("insert:ride-1:1", "finish:ride-1"), operations)
+        assertEquals(1L, sensorRecorder.diagnostics.value.persistedEventCount)
+    }
+
+    @Test
+    fun sensorRecordingFailure_doesNotStopCrashPipeline() {
+        val operations = mutableListOf<String>()
+        val rideStore = RecordingRideSessionStore(operations)
+        val source = TestRawSensorSource()
+        val rideRecorder = RideSessionRecorder(rideStore, timeProvider = { 2_000L })
+        val sensorRecorder = SensorSessionRecorder(
+            source = source,
+            sensorEventRepository = RecordingSensorEventRepository(operations, failInserts = true),
+            rideSessionRepository = rideStore,
+            batchSize = 1,
+            retryDelayMillis = 0L,
+            ioDispatcher = Dispatchers.Unconfined,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        )
+        SafetyMonitoringService.testRideSessionRecorder = rideRecorder
+        SafetyMonitoringService.testSensorSessionRecorder = sensorRecorder
+
+        service.onServiceStarted()
+        source.emit(RawSensorEvent(RawSensorType.GYROSCOPE, 10L, 1L, 1f, 2f, 3f, 3))
+
+        assertTrue(pipeline.isRunning)
+        assertEquals(1L, sensorRecorder.diagnostics.value.failedEventCount)
+        assertFalse(operations.any { it.startsWith("finish:") })
+        service.onServiceStopped()
     }
 
     @Test
@@ -497,5 +582,65 @@ class SafetyMonitoringServiceTest {
         service.isExplicitlyStopped = true
         val result = service.onStartCommand(null, 0, 1)
         assertEquals(android.app.Service.START_NOT_STICKY, result)
+    }
+
+    private class TestRawSensorSource : RawSensorEventSource {
+        private val events = MutableSharedFlow<RawSensorEvent>(extraBufferCapacity = 32)
+        var collectorStartCount: Int = 0
+            private set
+        override val rawSensorEvents: Flow<RawSensorEvent> = kotlinx.coroutines.flow.flow {
+            collectorStartCount++
+            events.collect { emit(it) }
+        }
+        override val droppedEventCount: Long = 0L
+        fun emit(event: RawSensorEvent) { events.tryEmit(event) }
+    }
+
+    private class RecordingSensorEventRepository(
+        private val operations: MutableList<String>,
+        private val failInserts: Boolean = false
+    ) : SensorEventRepository {
+        override suspend fun insertBatch(sessionId: String, events: List<RawSensorEvent>) {
+            operations += "insert:$sessionId:${events.size}"
+            if (failInserts) error("disk unavailable")
+        }
+        override suspend fun getEventsForSession(sessionId: String, limit: Int, offset: Int) = emptyList<RawSensorEvent>()
+        override suspend fun countForSession(sessionId: String) = 0L
+        override suspend fun getExportSnapshot(sessionId: String) = SensorEventExportSnapshot(0L, 0L)
+        override suspend fun getExportPage(
+            sessionId: String,
+            maxEventId: Long,
+            after: SensorEventExportCursor?,
+            limit: Int
+        ): List<RecordedSensorEvent> = emptyList()
+    }
+
+    private class RecordingRideSessionStore(
+        private val operations: MutableList<String>
+    ) : RideSessionRepository {
+        private var current = RideSession(
+            id = "ride-1", startedAtEpochMillis = 1_000L, endedAtEpochMillis = null,
+            startLatitude = null, startLongitude = null, endLatitude = null, endLongitude = null,
+            durationMillis = 0L, distanceMeters = null, averageSpeedMetersPerSecond = null,
+            maximumSpeedMetersPerSecond = null, status = RideSessionStatus.ACTIVE
+        )
+        private val sessions = kotlinx.coroutines.flow.MutableStateFlow(listOf(current))
+        override fun observeSessions(): Flow<List<RideSession>> = sessions.asStateFlow()
+        override fun observeSession(id: String): Flow<RideSession?> = kotlinx.coroutines.flow.MutableStateFlow(current.takeIf { it.id == id })
+        override suspend fun getSession(id: String): RideSession? = current.takeIf { it.id == id }
+        override suspend fun getActiveSession(): RideSession? = current.takeIf { it.status == RideSessionStatus.ACTIVE }
+        override suspend fun startOrResume(startedAtEpochMillis: Long): RideSession = current
+        override suspend fun appendPoint(sessionId: String, point: RideSessionPoint): Boolean = false
+        override suspend fun finish(sessionId: String, endedAtEpochMillis: Long, interrupted: Boolean): Boolean {
+            operations += "finish:$sessionId"
+            current = current.copy(
+                endedAtEpochMillis = endedAtEpochMillis,
+                status = if (interrupted) RideSessionStatus.INTERRUPTED else RideSessionStatus.INCOMPLETE
+            )
+            sessions.value = listOf(current)
+            return true
+        }
+        override suspend fun getPoints(sessionId: String): List<RideSessionPoint> = emptyList()
+        override suspend fun deleteSession(sessionId: String) = Unit
     }
 }

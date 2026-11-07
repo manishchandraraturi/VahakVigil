@@ -22,6 +22,7 @@ import android.os.PowerManager
 import com.manish.vahakvigil.domain.feedback.EmergencyFeedbackController
 import com.manish.vahakvigil.domain.location.LocationProvider
 import com.manish.vahakvigil.domain.location.RideSessionRecorder
+import com.manish.vahakvigil.data.sensor.SensorSessionRecorder
 import com.manish.vahakvigil.domain.model.CrashDetectionState
 import com.manish.vahakvigil.domain.model.EmergencyCountdownState
 import com.manish.vahakvigil.domain.model.RideLocationState
@@ -89,6 +90,12 @@ class SafetyMonitoringService : Service() {
         @androidx.annotation.VisibleForTesting
         internal var testServiceDispatcher: kotlinx.coroutines.CoroutineDispatcher? = null
 
+        @androidx.annotation.VisibleForTesting
+        internal var testRideSessionRecorder: RideSessionRecorder? = null
+
+        @androidx.annotation.VisibleForTesting
+        internal var testSensorSessionRecorder: SensorSessionRecorder? = null
+
         /**
          * Helper to request starting the foreground safety monitoring service.
          */
@@ -118,13 +125,23 @@ class SafetyMonitoringService : Service() {
     private val serviceScope = kotlinx.coroutines.CoroutineScope(
         (testServiceDispatcher ?: kotlinx.coroutines.Dispatchers.Default) + serviceJob
     )
-    private val sessionPersistenceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    private val sessionPersistenceScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + (testServiceDispatcher ?: kotlinx.coroutines.Dispatchers.IO)
+    )
     private var sessionFinishJob: Job? = null
+    private var sessionStartJob: Job? = null
+    private var serviceStopCleanupJob: Job? = null
     private val rideSessionRecorder: RideSessionRecorder? by lazy {
         // Service unit tests inject the monitoring dependencies without a real Android
         // Application. Session persistence is covered through RideSessionRecorder tests.
-        if (testSensorRepository != null) null
+        testRideSessionRecorder
+            ?: if (testSensorRepository != null) null
         else (application as? VahakVigilApp)?.rideSessionRepository?.let(::RideSessionRecorder)
+    }
+    private val sensorSessionRecorder: SensorSessionRecorder? by lazy {
+        testSensorSessionRecorder
+            ?: if (testSensorRepository != null) null
+            else (application as? VahakVigilApp)?.sensorSessionRecorder
     }
 
     internal val sensorRepository: SensorRepository
@@ -288,10 +305,25 @@ class SafetyMonitoringService : Service() {
             }
         }
         startStateObservation()
-        rideSessionRecorder?.let { recorder ->
-            serviceScope.launch {
+        val rideRecorder = rideSessionRecorder
+        val sensorRecorder = sensorSessionRecorder
+        if (rideRecorder != null && sensorRecorder != null && sessionStartJob?.isActive != true) {
+            sessionStartJob = serviceScope.launch {
                 sessionFinishJob?.join()
-                recorder.startOrResume()
+                try {
+                    val sessionId = rideRecorder.startOrResume()
+                    if (sessionId == null) {
+                        sensorRecorder.reportUnavailable("Ride session could not be initialized")
+                    } else if (!sensorRecorder.start(sessionId)) {
+                        // Recording failure is diagnostic only; crash monitoring continues.
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Exception) {
+                    sensorRecorder.reportUnavailable(
+                        "Sensor recording could not start: ${error.message ?: error.javaClass.simpleName}"
+                    )
+                }
             }
         }
         startLocationUpdates()
@@ -375,9 +407,24 @@ class SafetyMonitoringService : Service() {
             pipeline.stop()
         } catch (_: Exception) {
         }
-        rideSessionRecorder?.let { recorder ->
-            if (sessionFinishJob?.isActive != true) {
-                sessionFinishJob = sessionPersistenceScope.launch { recorder.finish() }
+        val rideRecorder = rideSessionRecorder
+        val sensorRecorder = sensorSessionRecorder
+        if ((rideRecorder != null || sensorRecorder != null) && sessionFinishJob?.isActive != true) {
+            val pendingStart = sessionStartJob
+            sessionFinishJob = sessionPersistenceScope.launch {
+                pendingStart?.join()
+                try {
+                    sensorRecorder?.stopAndFlush()
+                } catch (_: CancellationException) {
+                    throw CancellationException("Sensor recording flush was cancelled")
+                } catch (_: Exception) {
+                    // Recording failure must not prevent ride finalization or safety cleanup.
+                }
+                try {
+                    rideRecorder?.finish()
+                } catch (_: Exception) {
+                    // RideSessionRecorder already contains repository failures; retain service safety.
+                }
             }
         }
         serviceJob.cancelChildren()
@@ -426,8 +473,19 @@ class SafetyMonitoringService : Service() {
 
     private fun stopForegroundService() {
         onServiceStopped()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        val finishJob = sessionFinishJob
+        if (finishJob?.isActive != true) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else if (serviceStopCleanupJob?.isActive != true) {
+            serviceStopCleanupJob = sessionPersistenceScope.launch {
+                finishJob.join()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            }
+        }
     }
 
     private fun createNotificationChannel() {

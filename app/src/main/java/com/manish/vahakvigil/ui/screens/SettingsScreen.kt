@@ -56,6 +56,7 @@ fun SettingsScreen(
     onReadinessClick: () -> Unit = {},
     onContactsClick: () -> Unit = {},
     onMedicalClick: () -> Unit = {},
+    onEmergencySimulationClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -136,6 +137,8 @@ fun SettingsScreen(
             SettingRow(title = stringResource(R.string.settings_countdown), subtitle = stringResource(R.string.settings_countdown_value))
             SoftDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
             SettingRow(title = stringResource(R.string.settings_monitoring_state), subtitle = stringResource(R.string.settings_monitoring_subtitle))
+            SoftDivider(modifier = Modifier.fillMaxWidth().height(1.dp))
+            SettingRow(title = stringResource(R.string.simulation_settings_title), subtitle = stringResource(R.string.simulation_settings_body), onClick = onEmergencySimulationClick)
         }
 
         Spacer(modifier = Modifier.height(20.dp))

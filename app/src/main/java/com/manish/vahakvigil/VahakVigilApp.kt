@@ -41,12 +41,40 @@ class VahakVigilApp : Application() {
 
     val incidentEvidenceStore: IncidentEvidenceStore by lazy { IncidentEvidenceStore(this) }
 
-    val sensorDataSource: com.manish.vahakvigil.data.sensor.SensorDataSource by lazy {
+    private val androidSensorDataSource: com.manish.vahakvigil.data.sensor.AndroidSensorDataSource by lazy {
         com.manish.vahakvigil.data.sensor.AndroidSensorDataSource(this)
+    }
+
+    val sensorDataSource: com.manish.vahakvigil.data.sensor.SensorDataSource by lazy {
+        androidSensorDataSource
+    }
+
+    val rawSensorEventSource: com.manish.vahakvigil.data.sensor.RawSensorEventSource by lazy {
+        androidSensorDataSource
     }
 
     val sensorRepository: com.manish.vahakvigil.domain.repository.SensorRepository by lazy {
         com.manish.vahakvigil.data.repository.SensorRepositoryImpl(sensorDataSource)
+    }
+
+    val sensorEventRepository: com.manish.vahakvigil.domain.repository.SensorEventRepository by lazy {
+        com.manish.vahakvigil.data.repository.SensorEventRepositoryImpl(database.sensorEventDao())
+    }
+
+    val sensorCsvExporter: com.manish.vahakvigil.domain.export.SensorCsvExporter by lazy {
+        com.manish.vahakvigil.domain.export.SensorCsvExporter(sensorEventRepository)
+    }
+
+    val sensorCsvDocumentExporter: com.manish.vahakvigil.domain.export.SensorCsvDocumentExport by lazy {
+        com.manish.vahakvigil.data.export.AndroidSensorCsvDocumentExporter(contentResolver, sensorCsvExporter)
+    }
+
+    val sensorSessionRecorder: com.manish.vahakvigil.data.sensor.SensorSessionRecorder by lazy {
+        com.manish.vahakvigil.data.sensor.SensorSessionRecorder(
+            source = rawSensorEventSource,
+            sensorEventRepository = sensorEventRepository,
+            rideSessionRepository = rideSessionRepository
+        )
     }
 
     val locationProvider: com.manish.vahakvigil.domain.location.LocationProvider by lazy {
