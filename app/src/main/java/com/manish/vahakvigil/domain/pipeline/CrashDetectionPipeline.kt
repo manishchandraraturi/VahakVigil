@@ -16,6 +16,8 @@ import com.manish.vahakvigil.domain.model.CrashDetectionState
 import com.manish.vahakvigil.domain.model.EmergencyActionResult
 import com.manish.vahakvigil.domain.model.EmergencyActionResultStatus
 import com.manish.vahakvigil.domain.model.EmergencyCountdownState
+import com.manish.vahakvigil.domain.model.CrashDetectionExecutionMode
+import com.manish.vahakvigil.domain.model.DetectionEvaluationObservation
 import com.manish.vahakvigil.domain.model.EmergencyDecisionConfig
 import com.manish.vahakvigil.domain.model.EmergencyDecisionState
 import com.manish.vahakvigil.domain.model.EmergencyDispatchPayload
@@ -88,9 +90,22 @@ class CrashDetectionPipeline(
     private val timeProvider: () -> Long = { System.currentTimeMillis() },
     private val countdownDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val emergencyLifecycleRepository: EmergencyLifecycleRepository? = null,
-    private val emergencyLifecycleClock: EmergencyLifecycleClock = JvmEmergencyLifecycleClock
+    private val emergencyLifecycleClock: EmergencyLifecycleClock = JvmEmergencyLifecycleClock,
+    private val executionMode: CrashDetectionExecutionMode = CrashDetectionExecutionMode.PRODUCTION,
+    private val evaluationObserver: ((DetectionEvaluationObservation) -> Unit)? = null
 ) {
 
+    init {
+        require(executionMode != CrashDetectionExecutionMode.EVALUATION || emergencyLifecycleRepository == null) {
+            "Evaluation mode cannot use persistent emergency lifecycle storage"
+        }
+        require(executionMode == CrashDetectionExecutionMode.EVALUATION || evaluationObserver == null) {
+            "Evaluation observations are only available in evaluation mode"
+        }
+        require(executionMode != CrashDetectionExecutionMode.EVALUATION || dispatchDataCompiler == null && locationProvider == null) {
+            "Evaluation mode cannot use emergency dispatch or location providers"
+        }
+    }
 
     private val _state = MutableStateFlow(
         CrashDetectionState(
@@ -493,7 +508,7 @@ class CrashDetectionPipeline(
 
             // ── Step 8: Cancellation countdown ───────────────────────────
             var wasJustStarted = false
-            if (activeIncidentIdentity == null || activeIncidentIdentity == qualified.identity) {
+            if (executionMode == CrashDetectionExecutionMode.PRODUCTION &&
                 decision.state == EmergencyDecisionState.EMERGENCY_CANDIDATE
             ) {
                 if (countdownEngine.state == EmergencyCountdownState.IDLE) {
@@ -554,6 +569,24 @@ class CrashDetectionPipeline(
                 isNewIncident = isNewIncident
             )
 
+            if (executionMode == CrashDetectionExecutionMode.EVALUATION) {
+                try {
+                    evaluationObserver?.invoke(
+                        DetectionEvaluationObservation(
+                            timestampMillis = reading.timestamp,
+                            motionEvent = motionEvent,
+                            temporalEvent = temporalResult,
+                            confidenceScore = confidenceScore,
+                            candidateEvent = newCandidateEvent,
+                            qualifiedIncident = currentQualifiedIncident,
+                            postImpactResult = postImpactResult,
+                            decision = decision
+                        )
+                    )
+                } catch (_: Exception) {
+                    // A replay trace observer must not interrupt detector processing.
+                }
+            }
 
             if (dispatchTimestamp != null) {
                 Pair(dispatchTimestamp, currentIncidentId)
