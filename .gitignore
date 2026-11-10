@@ -33,3 +33,7 @@ keystore.properties
 
 # Private documents
 VahakVigil Patent Draft.docx
+
+# Python dataset toolkit
+__pycache__/
+*.py[cod]

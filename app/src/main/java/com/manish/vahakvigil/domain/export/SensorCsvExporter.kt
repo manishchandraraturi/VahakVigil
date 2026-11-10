@@ -38,9 +38,11 @@ class SensorCsvExporter(
     suspend fun export(
         sessionId: String,
         openOutputStream: () -> OutputStream,
+        csvSessionIdentifier: String = sessionId,
         onProgress: suspend (SensorCsvExportProgress) -> Unit = {}
     ): SensorCsvExportResult = withContext(ioDispatcher) {
         require(sessionId.isNotBlank()) { "sessionId must not be blank" }
+        require(csvSessionIdentifier.isNotBlank()) { "CSV session identifier must not be blank" }
         val snapshot = repository.getExportSnapshot(sessionId)
         if (snapshot.eventCount == 0L) return@withContext SensorCsvExportResult.Empty
 
@@ -65,7 +67,7 @@ class SensorCsvExporter(
                 }
                 for (row in page) {
                     coroutineContext.ensureActive()
-                    writer.write(row.toCsv(sessionId))
+                    writer.write(row.toCsv(csvSessionIdentifier))
                     writer.write("\n")
                 }
                 val last = page.last()

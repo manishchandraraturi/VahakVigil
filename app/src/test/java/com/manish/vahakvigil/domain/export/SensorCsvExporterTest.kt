@@ -208,6 +208,28 @@ class SensorCsvExporterTest {
         )
     }
 
+
+    @Test
+    fun `custom csvSessionIdentifier replaces internal session ID in output`() = runTest {
+        val internalSessionId = "internal-ride-xyz-999"
+        val publicDatasetId = "f501255e-8519-42b7-a3ca-7589d8cf5ab3"
+        val repository = FakeSensorEventRepository().apply {
+            add(internalSessionId, event(RawSensorType.ACCELEROMETER, 1_000_000L, 1f, 2f, 3f, 3))
+        }
+        val output = ByteArrayOutputStream()
+
+        val result = exporter(repository).export(
+            sessionId = internalSessionId,
+            openOutputStream = { output },
+            csvSessionIdentifier = publicDatasetId
+        )
+
+        val csv = output.toString(StandardCharsets.UTF_8.name())
+        assertEquals(SensorCsvExportResult.Complete(1), result)
+        assertTrue(csv.contains(publicDatasetId))
+        assertFalse(csv.contains(internalSessionId))
+    }
+
     private fun TestScope.exporter(repository: FakeSensorEventRepository, pageSize: Int = 500) = SensorCsvExporter(
         repository = repository,
         pageSize = pageSize,

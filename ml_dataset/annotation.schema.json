@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vahakvigil:annotation-manifest:v2",
+  "title": "VahakVigil Context and Binary Ground-Truth Annotation Manifest",
+  "type": "object",
+  "required": ["schema_version", "sessions"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "description": { "type": "string" },
+    "sessions": { "type": "array", "items": { "$ref": "#/$defs/session" } }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "session": {
+      "type": "object",
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "review_status": { "enum": ["UNREVIEWED", "REVIEWED", "NEEDS_REVIEW"] },
+        "labels": { "type": "array", "items": { "$ref": "#/$defs/label" } },
+        "binary_outcome": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/binaryOutcome" }] }
+      },
+      "additionalProperties": false
+    },
+    "label": {
+      "type": "object",
+      "required": ["label", "level", "annotation_source"],
+      "properties": {
+        "label": { "enum": ["NORMAL_RIDE", "BRAKING", "POTHOLE_OR_ROUGH_ROAD", "SUDDEN_MANEUVER", "PHONE_DROP", "MOUNTED_PHONE_MOVEMENT", "SIMULATED_IMPACT", "UNKNOWN"] },
+        "level": { "enum": ["SESSION", "EVENT"] },
+        "event_start_timestamp_nanos": { "type": "integer", "minimum": 0 },
+        "event_end_timestamp_nanos": { "type": "integer", "minimum": 0 },
+        "event_origin": { "enum": ["REAL", "SIMULATED", "UNKNOWN"], "default": "UNKNOWN" },
+        "annotation_source": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "review_status": { "enum": ["UNREVIEWED", "REVIEWED", "NEEDS_REVIEW"] },
+        "notes": { "type": "string" }
+      },
+      "allOf": [
+        { "if": { "properties": { "level": { "const": "EVENT" } } }, "then": { "required": ["event_start_timestamp_nanos", "event_end_timestamp_nanos"] } },
+        { "if": { "properties": { "level": { "const": "SESSION" } } }, "then": { "not": { "anyOf": [{ "required": ["event_start_timestamp_nanos"] }, { "required": ["event_end_timestamp_nanos"] }] } } }
+      ],
+      "additionalProperties": false
+    },
+    "binaryOutcome": {
+      "type": "object",
+      "required": ["session_id", "review_id", "outcome", "reviewer_id", "reviewed_at_utc", "evidence_provenance", "recording_origin", "audit_history"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "review_id": { "type": "string", "minLength": 1 },
+        "outcome": { "enum": ["CRASH_CONFIRMED", "NO_CRASH_CONFIRMED", "INDETERMINATE"] },
+        "reviewer_id": { "type": "string", "minLength": 1 },
+        "reviewed_at_utc": { "type": "string", "format": "date-time" },
+        "evidence_provenance": { "type": "string", "minLength": 1 },
+        "recording_origin": { "enum": ["REAL", "SIMULATED", "MIXED", "UNKNOWN"] },
+        "crash_onset_timestamp_nanos": { "type": "integer", "minimum": 0 },
+        "notes": { "type": "string" },
+        "audit_history": { "type": "array", "items": { "$ref": "#/$defs/supersededOutcome" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "outcome": { "const": "CRASH_CONFIRMED" } } }, "then": { "properties": { "recording_origin": { "const": "REAL" } } } }
+      ],
+      "additionalProperties": false
+    },
+    "supersededOutcome": {
+      "type": "object",
+      "required": ["session_id", "review_id", "outcome", "reviewer_id", "reviewed_at_utc", "evidence_provenance", "recording_origin", "superseded_at_utc", "superseded_by_review_id", "revision_reason"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "review_id": { "type": "string", "minLength": 1 },
+        "outcome": { "enum": ["CRASH_CONFIRMED", "NO_CRASH_CONFIRMED", "INDETERMINATE"] },
+        "reviewer_id": { "type": "string", "minLength": 1 },
+        "reviewed_at_utc": { "type": "string", "format": "date-time" },
+        "evidence_provenance": { "type": "string", "minLength": 1 },
+        "recording_origin": { "enum": ["REAL", "SIMULATED", "MIXED", "UNKNOWN"] },
+        "crash_onset_timestamp_nanos": { "type": "integer", "minimum": 0 },
+        "notes": { "type": "string" },
+        "superseded_at_utc": { "type": "string", "format": "date-time" },
+        "superseded_by_review_id": { "type": "string", "minLength": 1 },
+        "revision_reason": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        { "if": { "properties": { "outcome": { "const": "CRASH_CONFIRMED" } } }, "then": { "properties": { "recording_origin": { "const": "REAL" } } } }
+      ],
+      "additionalProperties": false
+    }
+  }
+}
