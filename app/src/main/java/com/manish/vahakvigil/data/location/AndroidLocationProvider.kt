@@ -19,6 +19,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.manish.vahakvigil.domain.location.LocationProvider
 import com.manish.vahakvigil.domain.location.LiveLocationAvailabilityGate
 import com.manish.vahakvigil.domain.model.EmergencyLocation
+import com.manish.vahakvigil.domain.model.EmergencyLocationSource
 import com.manish.vahakvigil.domain.model.RideLocationState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -70,6 +71,7 @@ class AndroidLocationProvider(
 
     internal var freshLocationFetcher: (suspend () -> EmergencyLocation?)? = null
     internal var lastLocationFetcher: (suspend () -> EmergencyLocation?)? = null
+    internal var wallClockMillisProvider: () -> Long = System::currentTimeMillis
 
     internal var freshLocationTimeoutMs: Long = FRESH_LOCATION_TIMEOUT_MS
     internal var totalLocationTimeoutMs: Long = LOCATION_TIMEOUT_MS
@@ -126,12 +128,18 @@ class AndroidLocationProvider(
             } catch (_: Exception) {
                 null
             }
-            if (fallback is EmergencyLocation.Available) {
-                fallback
+            if (fallback is EmergencyLocation.Available && isAcceptableLastKnown(fallback)) {
+                fallback.copy(source = EmergencyLocationSource.LAST_KNOWN)
             } else {
                 EmergencyLocation.Unavailable
             }
         }
+    }
+
+    private fun isAcceptableLastKnown(location: EmergencyLocation.Available): Boolean {
+        val timestamp = location.timestampMs ?: return false
+        val age = wallClockMillisProvider() - timestamp
+        return age in 0L..MAX_LAST_KNOWN_AGE_MS
     }
 
     private suspend fun queryFreshLocation(): EmergencyLocation? {
@@ -144,7 +152,7 @@ class AndroidLocationProvider(
                     Priority.PRIORITY_HIGH_ACCURACY,
                     cts.token
                 ).addOnSuccessListener { location: Location? ->
-                    continuation.resume(location.toEmergencyLocation())
+                    continuation.resume(location.toEmergencyLocation(EmergencyLocationSource.CURRENT_FIX))
                 }.addOnFailureListener {
                     continuation.resume(null)
                 }.addOnCanceledListener {
@@ -164,7 +172,7 @@ class AndroidLocationProvider(
             try {
                 client.lastLocation
                     .addOnSuccessListener { location: Location? ->
-                        continuation.resume(location.toEmergencyLocation())
+                        continuation.resume(location.toEmergencyLocation(EmergencyLocationSource.LAST_KNOWN))
                     }
                     .addOnFailureListener {
                         continuation.resume(null)
@@ -180,7 +188,7 @@ class AndroidLocationProvider(
         }
     }
 
-    internal fun Location?.toEmergencyLocation(): EmergencyLocation {
+    internal fun Location?.toEmergencyLocation(source: EmergencyLocationSource = EmergencyLocationSource.CURRENT_FIX): EmergencyLocation {
         if (this == null) return EmergencyLocation.Unavailable
 
         val lat = latitude
@@ -202,7 +210,8 @@ class AndroidLocationProvider(
             latitude = lat,
             longitude = lon,
             accuracyMeters = accuracy,
-            timestampMs = timestamp
+            timestampMs = timestamp,
+            source = source
         )
     }
 
@@ -323,6 +332,7 @@ class AndroidLocationProvider(
 
     companion object {
         const val LOCATION_TIMEOUT_MS = 5_000L
+        const val MAX_LAST_KNOWN_AGE_MS = 15 * 60_000L
         const val FRESH_LOCATION_TIMEOUT_MS = 4_500L
         const val LIVE_LOCATION_INTERVAL_MS = 5_000L
         const val LIVE_LOCATION_MIN_INTERVAL_MS = 3_000L

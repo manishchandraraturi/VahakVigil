@@ -756,7 +756,7 @@ class EmergencyResponse2Part2Test {
         assertNotEquals(AmbulanceRequestStatus.ACCEPTED, ambRes.status)
         assertEquals(AmbulanceRequestStatus.NOT_CONFIGURED, ambRes.status)
 
-        // Delivery status for SMS handoff is DELIVERY_UNKNOWN, not confirmed read
+        // A successful API return records system handoff, not carrier or handset delivery.
         val smsResult = actionExecutor.execute(
             EmergencyActionRequest(
                 1L,
@@ -767,6 +767,6 @@ class EmergencyResponse2Part2Test {
                 })
             )
         )
-        assertEquals(EmergencyDeliveryStatus.DELIVERY_UNKNOWN, smsResult.deliveryStatus)
+        assertEquals(EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM, smsResult.deliveryStatus)
     }
 }

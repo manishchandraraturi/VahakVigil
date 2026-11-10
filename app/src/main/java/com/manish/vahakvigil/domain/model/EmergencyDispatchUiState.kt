@@ -26,5 +26,8 @@ enum class EmergencyDispatchUiState {
     DISPATCH_TRIGGERED,
 
     /** Emergency action failed (e.g., no contacts, missing permissions, or telephony error). */
-    DISPATCH_FAILED
+    DISPATCH_FAILED,
+
+    /** SMS API outcome was ambiguous; this incident is not resent automatically. */
+    DISPATCH_UNKNOWN
 }

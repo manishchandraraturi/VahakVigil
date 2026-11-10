@@ -23,7 +23,8 @@ sealed interface EmergencyLocation {
         val latitude: Double,
         val longitude: Double,
         val accuracyMeters: Float? = null,
-        val timestampMs: Long? = null
+        val timestampMs: Long? = null,
+        val source: EmergencyLocationSource = EmergencyLocationSource.CURRENT_FIX
     ) : EmergencyLocation {
         val mapsUrl: String
             get() = "https://maps.google.com/?q=$latitude,$longitude"
@@ -48,3 +49,5 @@ sealed interface EmergencyLocation {
         }
     }
 }
+
+enum class EmergencyLocationSource { CURRENT_FIX, LAST_KNOWN }

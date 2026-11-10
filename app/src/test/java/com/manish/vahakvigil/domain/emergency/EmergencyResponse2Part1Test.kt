@@ -205,7 +205,7 @@ class EmergencyResponse2Part1Test {
     // ─── 4. Dispatch Delivery Status Semantics ────────────────────────────────
 
     @Test
-    fun `successful dispatch initiation acknowledges transmission and marks delivery unknown`() = runTest {
+    fun `successful dispatch initiation records messaging handoff without claiming delivery`() = runTest {
         val c1 = Contact(id = 1L, name = "Primary", relationship = "Spouse", phone = "+919876543211", priority = 1)
         contactRepository.saveContact(c1)
 
@@ -220,7 +220,7 @@ class EmergencyResponse2Part1Test {
         val result = actionExecutor.execute(request)
         assertEquals(EmergencyActionResultStatus.TRIGGERED, result.status)
         // Must acknowledge transmission without claiming delivery
-        assertEquals(EmergencyDeliveryStatus.DELIVERY_UNKNOWN, result.deliveryStatus)
+        assertEquals(EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM, result.deliveryStatus)
         assertEquals(1, fakeSmsSender.sentRecords.size)
     }
 

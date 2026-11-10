@@ -3,6 +3,7 @@ package com.manish.vahakvigil.sms
 import com.manish.vahakvigil.domain.model.EmergencyActionResult
 import com.manish.vahakvigil.domain.model.EmergencyActionResultStatus
 import com.manish.vahakvigil.domain.model.EmergencyActionType
+import com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus
 import com.manish.vahakvigil.domain.sms.EmergencySmsSender
 
 data class SentSmsRecord(
@@ -17,7 +18,8 @@ class FakeEmergencySmsSender(
     var outcome: EmergencyActionResultStatus = EmergencyActionResultStatus.TRIGGERED,
     var shouldSimulatePermissionFailure: Boolean = false,
     var shouldSimulateProviderFailure: Boolean = false,
-    var failurePhonePredicate: ((String) -> Boolean)? = null
+    var failurePhonePredicate: ((String) -> Boolean)? = null,
+    var deliveryStatusOverride: EmergencyDeliveryStatus? = null
 ) : EmergencySmsSender {
 
     val sentRecords = mutableListOf<SentSmsRecord>()
@@ -82,7 +84,12 @@ class FakeEmergencySmsSender(
             status = outcome,
             actionType = EmergencyActionType.SMS,
             timestamp = System.currentTimeMillis(),
-            details = if (outcome == EmergencyActionResultStatus.TRIGGERED) "SMS send initiated" else "SMS send failed"
+            details = if (outcome == EmergencyActionResultStatus.TRIGGERED) "SMS send initiated" else "SMS send failed",
+            deliveryStatus = deliveryStatusOverride ?: when (outcome) {
+                EmergencyActionResultStatus.TRIGGERED -> EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM
+                EmergencyActionResultStatus.FAILED -> EmergencyDeliveryStatus.FAILED
+                EmergencyActionResultStatus.NOT_TRIGGERED -> EmergencyDeliveryStatus.NOT_REQUESTED
+            }
         )
     }
 
@@ -93,5 +100,6 @@ class FakeEmergencySmsSender(
         shouldSimulatePermissionFailure = false
         shouldSimulateProviderFailure = false
         failurePhonePredicate = null
+        deliveryStatusOverride = null
     }
 }

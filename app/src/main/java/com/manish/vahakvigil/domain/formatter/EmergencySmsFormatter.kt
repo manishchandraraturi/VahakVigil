@@ -2,6 +2,7 @@ package com.manish.vahakvigil.domain.formatter
 
 import com.manish.vahakvigil.domain.model.EmergencyDispatchPayload
 import com.manish.vahakvigil.domain.model.EmergencyLocation
+import com.manish.vahakvigil.domain.model.EmergencyLocationSource
 import com.manish.vahakvigil.domain.model.EmergencySmsMessage
 import com.manish.vahakvigil.domain.model.EmergencySmsValidationResult
 import com.manish.vahakvigil.domain.model.SmsEncoding
@@ -76,6 +77,11 @@ class EmergencySmsFormatter(
             is EmergencyLocation.Unavailable -> lines.add("Location: unavailable")
             is EmergencyLocation.Available -> {
                 lines.add("Location: ${loc.latitude}, ${loc.longitude}")
+                if (loc.source == EmergencyLocationSource.LAST_KNOWN) {
+                    lines.add("Location source: Last known location${loc.timestampMs?.let { " at ${formatTimestamp(it)}" }.orEmpty()}")
+                } else {
+                    lines.add("Location source: Current location fix")
+                }
                 lines.add("Map: ${loc.mapsUrl}")
             }
         }

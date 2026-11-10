@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.manish.vahakvigil.domain.model.EmergencyActionResult
 import com.manish.vahakvigil.domain.model.EmergencyActionResultStatus
 import com.manish.vahakvigil.domain.model.EmergencyActionType
+import com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus
 import com.manish.vahakvigil.domain.sms.EmergencySmsSender
 
 /**
@@ -109,21 +110,24 @@ class AndroidEmergencySmsSender(
                 status = EmergencyActionResultStatus.TRIGGERED,
                 actionType = EmergencyActionType.SMS,
                 timestamp = timestamp,
-                details = "SMS transmission initiated (${parts.size} segment(s))"
+                details = "SMS request accepted by Android messaging system (${parts.size} segment(s)); handset delivery is unconfirmed",
+                deliveryStatus = EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM
             )
         } catch (e: SecurityException) {
             EmergencyActionResult(
                 status = EmergencyActionResultStatus.FAILED,
                 actionType = EmergencyActionType.SMS,
                 timestamp = timestamp,
-                details = "SecurityException during SMS transmission: ${e.message}"
+                details = "SMS API outcome is unknown after a security interruption",
+                deliveryStatus = EmergencyDeliveryStatus.DELIVERY_UNKNOWN
             )
         } catch (e: Exception) {
             EmergencyActionResult(
                 status = EmergencyActionResultStatus.FAILED,
                 actionType = EmergencyActionType.SMS,
                 timestamp = timestamp,
-                details = "Failed to send SMS: ${e.message}"
+                details = "SMS API outcome is unknown after an interruption",
+                deliveryStatus = EmergencyDeliveryStatus.DELIVERY_UNKNOWN
             )
         }
     }

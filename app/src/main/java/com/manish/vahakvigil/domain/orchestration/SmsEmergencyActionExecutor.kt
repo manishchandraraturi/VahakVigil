@@ -5,6 +5,7 @@ import com.manish.vahakvigil.domain.model.EmergencyActionRequest
 import com.manish.vahakvigil.domain.model.EmergencyActionResult
 import com.manish.vahakvigil.domain.model.EmergencyActionResultStatus
 import com.manish.vahakvigil.domain.model.EmergencyActionType
+import com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus
 import com.manish.vahakvigil.domain.model.EmergencySmsValidationStatus
 import com.manish.vahakvigil.domain.sms.EmergencySmsSender
 import kotlinx.coroutines.runBlocking
@@ -81,6 +82,7 @@ class SmsEmergencyActionExecutor(
         // Step 5: Dispatch to each contact independently
         var triggeredCount = 0
         var failedCount = 0
+        var unknownCount = 0
         val failureReasons = mutableListOf<String>()
 
         for (contact in payload.emergencyContacts) {
@@ -100,25 +102,37 @@ class SmsEmergencyActionExecutor(
 
             if (sendResult.status == EmergencyActionResultStatus.TRIGGERED) {
                 triggeredCount++
+            } else if (sendResult.deliveryStatus == EmergencyDeliveryStatus.DELIVERY_UNKNOWN) {
+                unknownCount++
             } else {
                 failedCount++
                 failureReasons.add(sendResult.details)
             }
         }
 
-        return if (triggeredCount > 0 && failedCount == 0) {
+        return if (unknownCount > 0) {
+            EmergencyActionResult(
+                status = EmergencyActionResultStatus.FAILED,
+                actionType = EmergencyActionType.SMS,
+                timestamp = request.incidentTimestamp,
+                details = "SMS outcome unknown for $unknownCount contact(s); automatic retry is unsafe",
+                deliveryStatus = EmergencyDeliveryStatus.DELIVERY_UNKNOWN
+            )
+        } else if (triggeredCount > 0 && failedCount == 0) {
             EmergencyActionResult(
                 status = EmergencyActionResultStatus.TRIGGERED,
                 actionType = EmergencyActionType.SMS,
                 timestamp = request.incidentTimestamp,
-                details = "SMS dispatch triggered for $triggeredCount contact(s)"
+                details = "SMS request accepted by Android messaging system for $triggeredCount contact(s)",
+                deliveryStatus = EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM
             )
         } else if (triggeredCount > 0 && failedCount > 0) {
             EmergencyActionResult(
                 status = EmergencyActionResultStatus.TRIGGERED,
                 actionType = EmergencyActionType.SMS,
                 timestamp = request.incidentTimestamp,
-                details = "Partial SMS dispatch: $triggeredCount triggered, $failedCount failed (${failureReasons.joinToString("; ")})"
+                details = "Partial SMS dispatch: $triggeredCount accepted, $failedCount failed (${failureReasons.joinToString("; ")})",
+                deliveryStatus = EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM
             )
         } else {
             EmergencyActionResult(

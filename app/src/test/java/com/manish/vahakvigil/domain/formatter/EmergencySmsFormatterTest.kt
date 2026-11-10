@@ -3,6 +3,7 @@ package com.manish.vahakvigil.domain.formatter
 import com.manish.vahakvigil.domain.model.EmergencyDispatchContact
 import com.manish.vahakvigil.domain.model.EmergencyDispatchPayload
 import com.manish.vahakvigil.domain.model.EmergencyLocation
+import com.manish.vahakvigil.domain.model.EmergencyLocationSource
 import com.manish.vahakvigil.domain.model.LocalIncidentEvidence
 import com.manish.vahakvigil.domain.model.EmergencyMedicalSummary
 import com.manish.vahakvigil.domain.model.EmergencySmsMessage
@@ -107,6 +108,23 @@ class EmergencySmsFormatterTest {
         assertFalse("Should not contain blood group", sms.messageText.contains("Blood group:"))
         assertTrue(sms.messageText.contains("Location: unavailable"))
         assertFalse("Must never output literal null", sms.messageText.contains("null"))
+    }
+
+    @Test
+    fun `cached GPS location is explicitly labeled as last known with capture time`() {
+        val payload = EmergencyDispatchPayload(
+            incidentTimestamp = 1_700_000_000_000L,
+            medicalSummary = null,
+            emergencyContacts = listOf(sampleContact),
+            location = EmergencyLocation.Available(
+                12.0, 77.0, timestampMs = 1_700_000_000_000L,
+                source = EmergencyLocationSource.LAST_KNOWN
+            )
+        )
+
+        val message = formatter.format(payload).messageText
+        assertTrue(message.contains("Location source: Last known location at 2023-11-14 22:13:20 UTC"))
+        assertTrue(message.contains("12.0, 77.0"))
     }
 
     // ─── 3. Empty contacts do not break formatting ────────────────────────────

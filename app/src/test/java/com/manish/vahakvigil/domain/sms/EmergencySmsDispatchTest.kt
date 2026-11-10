@@ -293,7 +293,7 @@ class EmergencySmsDispatchTest {
         )
 
         assertEquals(EmergencyActionResultStatus.TRIGGERED, result.status)
-        assertTrue(result.details.contains("SMS dispatch triggered"))
+        assertTrue(result.details.contains("SMS request accepted by Android messaging system"))
     }
 
     // ─── 13. No SMS is sent during normal sensor monitoring ───────────────────
@@ -392,7 +392,7 @@ class EmergencySmsDispatchTest {
         assertEquals(EmergencyActionResultStatus.TRIGGERED, result.status)
         assertEquals(2, fakeSmsSender.callCount)
         assertTrue(result.details.contains("Partial SMS dispatch"))
-        assertTrue(result.details.contains("1 triggered, 1 failed"))
+        assertTrue(result.details.contains("1 accepted, 1 failed"))
         // Privacy check: raw phone number of contact 2 must not be exposed in result details
         assertFalse(result.details.contains(sampleContact2.phone))
     }
@@ -416,6 +416,24 @@ class EmergencySmsDispatchTest {
         assertEquals(EmergencyActionResultStatus.FAILED, result.status)
         assertEquals(2, fakeSmsSender.callCount)
         assertTrue(result.details.contains("SMS dispatch failed for all contacts"))
+    }
+
+    @Test
+    fun `ambiguous sender outcome is preserved and must not be treated as a safe retry`() {
+        fakeSmsSender.outcome = EmergencyActionResultStatus.FAILED
+        fakeSmsSender.deliveryStatusOverride = com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN
+
+        val result = orchestrator.evaluate(
+            decision = candidateDecision(),
+            countdownState = EmergencyCountdownState.EXPIRED,
+            actionType = EmergencyActionType.SMS,
+            dispatchPayload = validPayload
+        )
+
+        assertEquals(EmergencyActionResultStatus.FAILED, result.status)
+        assertEquals(com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN, result.deliveryStatus)
+        assertTrue(result.details.contains("automatic retry is unsafe"))
+        assertEquals(1, fakeSmsSender.callCount)
     }
 
     // ─── 20. Privacy - phone numbers not in aggregate failure details ─────────

@@ -29,7 +29,7 @@ class AndroidLocationProviderTest {
     @Test
     fun `fresh location succeeds and is preferred over last known location`() = runTest {
         val freshLoc = EmergencyLocation.Available(12.9716, 77.5946, 3.0f, 1_700_000_000_000L)
-        val lastLoc = EmergencyLocation.Available(13.0827, 80.2707, 15.0f, 1_699_999_000_000L)
+        val lastLoc = EmergencyLocation.Available(13.0827, 80.2707, 15.0f, System.currentTimeMillis() - 60_000L)
 
         val provider = AndroidLocationProvider(
             context = null,
@@ -52,13 +52,14 @@ class AndroidLocationProviderTest {
         val available = result as EmergencyLocation.Available
         assertEquals(12.9716, available.latitude, 0.0001)
         assertEquals(77.5946, available.longitude, 0.0001)
+        assertEquals(com.manish.vahakvigil.domain.model.EmergencyLocationSource.CURRENT_FIX, available.source)
     }
 
     // ─── 2. Fresh location fails but last known location exists ──────────────
 
     @Test
     fun `fresh location fails but last known location exists falls back immediately`() = runTest {
-        val lastLoc = EmergencyLocation.Available(13.0827, 80.2707, 10.0f, 1_699_999_000_000L)
+        val lastLoc = EmergencyLocation.Available(13.0827, 80.2707, 10.0f, System.currentTimeMillis() - 60_000L)
 
         val provider = AndroidLocationProvider(
             context = null,
@@ -81,13 +82,14 @@ class AndroidLocationProviderTest {
         val available = result as EmergencyLocation.Available
         assertEquals(13.0827, available.latitude, 0.0001)
         assertEquals(80.2707, available.longitude, 0.0001)
+        assertEquals(com.manish.vahakvigil.domain.model.EmergencyLocationSource.LAST_KNOWN, available.source)
     }
 
     // ─── 3. Fresh location remains pending and last known location exists ────
 
     @Test
     fun `fresh location remains pending and last known location exists falls back at fresh timeout`() = runTest {
-        val lastLoc = EmergencyLocation.Available(28.6139, 77.2090, 8.0f, 1_699_999_000_000L)
+        val lastLoc = EmergencyLocation.Available(28.6139, 77.2090, 8.0f, System.currentTimeMillis() - 60_000L)
         var freshCancelled = false
 
         val provider = AndroidLocationProvider(
@@ -141,6 +143,20 @@ class AndroidLocationProviderTest {
 
         val result = provider.getCurrentLocation()
         assertEquals(EmergencyLocation.Unavailable, result)
+    }
+
+    @Test
+    fun `stale last known location is rejected instead of presented as live`() = runTest {
+        val now = 1_700_000_000_000L
+        val provider = AndroidLocationProvider().apply {
+            wallClockMillisProvider = { now }
+            freshLocationTimeoutMs = 100L
+            totalLocationTimeoutMs = 300L
+            freshLocationFetcher = { null }
+            lastLocationFetcher = { EmergencyLocation.Available(12.0, 77.0, timestampMs = now - AndroidLocationProvider.MAX_LAST_KNOWN_AGE_MS - 1L) }
+        }
+
+        assertEquals(EmergencyLocation.Unavailable, provider.getCurrentLocation())
     }
 
     // ─── 5. Coroutine cancellation ───────────────────────────────────────────
