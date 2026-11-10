@@ -39,6 +39,20 @@ class VahakVigilApp : Application() {
         EmergencyIncidentRepositoryImpl(database.emergencyIncidentDao())
     }
 
+    val emergencyLifecycleRepository: com.manish.vahakvigil.domain.repository.EmergencyLifecycleRepository by lazy {
+        com.manish.vahakvigil.data.repository.EmergencyLifecycleRepositoryImpl(database.emergencyLifecycleDao())
+    }
+
+    val emergencyLifecycleClock: com.manish.vahakvigil.domain.model.EmergencyLifecycleClock by lazy {
+        object : com.manish.vahakvigil.domain.model.EmergencyLifecycleClock {
+            override fun wallClockMillis() = System.currentTimeMillis()
+            override fun elapsedRealtimeMillis() = android.os.SystemClock.elapsedRealtime()
+            override fun bootCount() = try {
+                android.provider.Settings.Global.getInt(contentResolver, android.provider.Settings.Global.BOOT_COUNT)
+            } catch (_: Exception) { -1 }
+        }
+    }
+
     val incidentEvidenceStore: IncidentEvidenceStore by lazy { IncidentEvidenceStore(this) }
 
     private val androidSensorDataSource: com.manish.vahakvigil.data.sensor.AndroidSensorDataSource by lazy {
@@ -143,7 +157,9 @@ class VahakVigilApp : Application() {
             sensorRepository = sensorRepository,
             dispatchDataCompiler = compiler,
             actionOrchestrator = orchestrator,
-            locationProvider = locationProvider
+            locationProvider = locationProvider,
+            emergencyLifecycleRepository = emergencyLifecycleRepository,
+            emergencyLifecycleClock = emergencyLifecycleClock
         )
     }
 

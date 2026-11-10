@@ -171,6 +171,11 @@
     <string name="emergency_alert_initiated_body">Emergency alert initiated for your designated emergency contacts.</string>
     <string name="emergency_status_triggered">Dispatch status: Triggered</string>
     <string name="emergency_delivery_note">Alerts were handed off to the mobile network. Delivery confirmation depends on carrier connectivity.</string>
+    <string name="emergency_dispatch_unknown_title">SMS status is unknown</string>
+    <string name="emergency_dispatch_unknown_body">The messaging service may have accepted the alert before the interruption. VahakVigil will not resend it automatically to avoid duplicate alerts.</string>
+    <string name="emergency_location_current">Current location fix included.</string>
+    <string name="emergency_location_last_known">Last known location included, captured at %1$s. It may no longer reflect the rider’s current position.</string>
+    <string name="emergency_location_unavailable">No valid location was available. The emergency alert was not delayed while searching.</string>
     <string name="action_return_home">RETURN TO HOME</string>
     <string name="emergency_call_direct">If you can speak, you may also call emergency services directly.</string>
     <string name="emergency_not_sent">EMERGENCY ALERT NOT SENT</string>

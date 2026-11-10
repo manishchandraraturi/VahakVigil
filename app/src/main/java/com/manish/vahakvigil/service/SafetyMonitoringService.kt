@@ -215,6 +215,15 @@ class SafetyMonitoringService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                if (pipeline.state.value.isEmergencyModeActive) {
+                    // Emergency countdown/dispatch remain service-owned until the rider resolves the incident.
+                    isExplicitlyStopped = false
+                    updateEmergencyNotification(
+                        isEmergency = true,
+                        remainingSeconds = (pipeline.state.value.emergencyCountdownRemainingMillis / 1000).coerceAtLeast(0L).toInt()
+                    )
+                    return START_STICKY
+                }
                 isExplicitlyStopped = true
                 stopForegroundService()
                 return START_NOT_STICKY
@@ -338,6 +347,7 @@ class SafetyMonitoringService : Service() {
                     _currentRideLocation.value = locationState
                     if (locationState is RideLocationState.Available) {
                         rideSessionRecorder?.record(locationState)
+                        pipeline.recordEmergencyLocation(locationState)
                     }
                 }
             } catch (cancellation: CancellationException) {

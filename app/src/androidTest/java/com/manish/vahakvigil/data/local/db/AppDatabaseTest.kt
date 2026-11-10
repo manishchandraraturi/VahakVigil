@@ -13,6 +13,10 @@ import com.manish.vahakvigil.domain.model.RideSessionPoint
 import com.manish.vahakvigil.domain.model.RideSessionStatus
 import com.manish.vahakvigil.data.repository.EmergencyIncidentRepositoryImpl
 import com.manish.vahakvigil.domain.model.EmergencyIncidentRecord
+import com.manish.vahakvigil.data.repository.EmergencyLifecycleRepositoryImpl
+import com.manish.vahakvigil.domain.model.EmergencyLifecycleRecord
+import com.manish.vahakvigil.domain.model.EmergencyLifecyclePhase
+import com.manish.vahakvigil.domain.model.EmergencyDispatchAttemptState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -103,6 +107,29 @@ class AppDatabaseTest {
         assertEquals("Updated", retrieved?.name)
         assertEquals("25", retrieved?.age)
         assertEquals("AB+", retrieved?.bloodGroup)
+    }
+
+    @Test
+    fun emergencyLifecyclePersistsAndAtomicallyPreventsDuplicateOrUnknownRetry() = runTest {
+        val repository = EmergencyLifecycleRepositoryImpl(db.emergencyLifecycleDao())
+        val record = EmergencyLifecycleRecord(
+            incidentId = "stable-incident-id",
+            incidentCreatedAtEpochMillis = 1_700_000_000_000,
+            windowStartEpochMillis = 1_699_999_990_000,
+            windowEndEpochMillis = 1_700_000_000_000,
+            confidenceScore = .8f,
+            phase = EmergencyLifecyclePhase.COUNTING_DOWN,
+            deadlineElapsedRealtimeMillis = 75_000,
+            deadlineEpochMillis = 1_700_000_075_000,
+            bootCount = 4
+        )
+        repository.createIfMissing(record)
+        assertEquals(record, repository.get(record.incidentId))
+        assertTrue(repository.beginDispatchAttempt(record.incidentId, false, 1_700_000_075_000))
+        assertFalse(repository.beginDispatchAttempt(record.incidentId, false, 1_700_000_075_001))
+        repository.updateOutcome(record.incidentId, EmergencyLifecyclePhase.DISPATCH_UNKNOWN, EmergencyDispatchAttemptState.UNKNOWN, 1_700_000_075_002)
+        assertFalse(repository.beginDispatchAttempt(record.incidentId, true, 1_700_000_076_000))
+        assertEquals(EmergencyDispatchAttemptState.UNKNOWN, repository.get(record.incidentId)?.dispatchState)
     }
 
     @Test

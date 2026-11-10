@@ -21,6 +21,17 @@ import com.manish.vahakvigil.domain.model.EmergencyDecisionState
 import com.manish.vahakvigil.domain.model.EmergencyDispatchPayload
 import com.manish.vahakvigil.domain.model.EmergencyDispatchUiState
 import com.manish.vahakvigil.domain.model.EmergencyLocation
+import com.manish.vahakvigil.domain.model.EmergencyLifecycleClock
+import com.manish.vahakvigil.domain.model.JvmEmergencyLifecycleClock
+import com.manish.vahakvigil.domain.model.EmergencyLifecycleRecord
+import com.manish.vahakvigil.domain.model.EmergencyLifecyclePhase
+import com.manish.vahakvigil.domain.model.EmergencyDispatchAttemptState
+import com.manish.vahakvigil.domain.model.EmergencyUserResponse
+import com.manish.vahakvigil.domain.model.EmergencyCountdownRecovery
+import com.manish.vahakvigil.domain.model.ConfidenceScore
+import com.manish.vahakvigil.domain.model.QualifiedIncident
+import com.manish.vahakvigil.domain.model.TemporalMotionEvent
+import com.manish.vahakvigil.domain.model.PostImpactStatus
 import com.manish.vahakvigil.domain.model.EventQualificationConfig
 import com.manish.vahakvigil.domain.model.MotionDetectionConfig
 import com.manish.vahakvigil.domain.model.MotionWindow
@@ -30,6 +41,7 @@ import com.manish.vahakvigil.domain.model.SensorReading
 import com.manish.vahakvigil.domain.model.TemporalMotionEventType
 import com.manish.vahakvigil.domain.orchestration.EmergencyActionOrchestrator
 import com.manish.vahakvigil.domain.repository.SensorRepository
+import com.manish.vahakvigil.domain.repository.EmergencyLifecycleRepository
 import com.manish.vahakvigil.domain.formatter.EmergencySmsFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -44,6 +56,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.UUID
 
 /**
  * Domain-level coordinator executing the complete VahakVigil crash detection,
@@ -71,8 +86,11 @@ class CrashDetectionPipeline(
     private val smsFormatter: EmergencySmsFormatter = EmergencySmsFormatter(),
     private val locationProvider: LocationProvider? = null,
     private val timeProvider: () -> Long = { System.currentTimeMillis() },
-    private val countdownDispatcher: CoroutineDispatcher = Dispatchers.Default
+    private val countdownDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val emergencyLifecycleRepository: EmergencyLifecycleRepository? = null,
+    private val emergencyLifecycleClock: EmergencyLifecycleClock = JvmEmergencyLifecycleClock
 ) {
+
 
     private val _state = MutableStateFlow(
         CrashDetectionState(
@@ -85,10 +103,16 @@ class CrashDetectionPipeline(
     private var activeScope: CoroutineScope? = null
     private var countdownTickerJob: Job? = null
     private var dispatchJob: Job? = null
+    private var lifecycleStartupJob: Job? = null
+    private var activeLifecycleIncidentId: String? = null
+    private var pendingLifecycleRecord: EmergencyLifecycleRecord? = null
+    private var lifecycleQualifiedIncident: QualifiedIncident? = null
+    private var pendingDispatchAfterRecovery = false
+    private val lifecycleMutex = Mutex()
     @Volatile private var isDispatchInProgress: Boolean = false
 
     val isRunning: Boolean
-        get() = readingsJob?.isActive == true
+        get() = readingsJob?.isActive == true || lifecycleStartupJob?.isActive == true
 
     /**
      * Bounded chronological buffer of recent sensor readings for temporal motion analysis.
@@ -130,6 +154,25 @@ class CrashDetectionPipeline(
         activeScope = coroutineScope
         readingsJob?.cancel()
 
+        if (emergencyLifecycleRepository != null && activeIncidentIdentity == null && !_state.value.isEmergencyModeActive) {
+            lifecycleStartupJob = coroutineScope.launch {
+                restoreEmergencyLifecycle()
+                synchronized(this@CrashDetectionPipeline) { startMonitoring(coroutineScope) }
+                if (pendingDispatchAfterRecovery) {
+                    pendingDispatchAfterRecovery = false
+                    val incidentId = activeIncidentIdentity
+                    val timestamp = _state.value.latestEmergencyDecision?.incidentTimestampMs ?: timeProvider()
+                    if (incidentId != null) triggerEmergencyDispatch(timestamp, incidentId)
+                }
+            }
+            return
+        }
+
+        startMonitoring(coroutineScope)
+    }
+
+    private fun startMonitoring(coroutineScope: CoroutineScope) {
+
         val hasActiveEmergency = _state.value.isEmergencyModeActive || activeIncidentIdentity != null
         if (!hasActiveEmergency) {
             readingBuffer.clear()
@@ -138,11 +181,11 @@ class CrashDetectionPipeline(
             countdownEngine.reset()
             actionOrchestrator.reset()
             activeIncidentIdentity = null
+            lifecycleQualifiedIncident = null
             closedIncidentIdentity = null
             userDismissedEmergencyMode = false
         } else if (countdownEngine.state == EmergencyCountdownState.COUNTING_DOWN) {
-            val startTs = countdownEngine.startTimestampMillis ?: timeProvider()
-            startCountdownTicker(startTs)
+            startCountdownTicker(timeProvider())
         }
 
         sensorRepository.startMonitoring()
@@ -150,6 +193,157 @@ class CrashDetectionPipeline(
         readingsJob = coroutineScope.launch {
             sensorRepository.sensorReadings.collect { reading ->
                 processReading(reading)
+            }
+        }
+    }
+
+    private suspend fun restoreEmergencyLifecycle() {
+        val repository = emergencyLifecycleRepository ?: return
+        val record = try { repository.getLatest() } catch (_: Exception) { null } ?: return
+        if (record.phase == EmergencyLifecyclePhase.CANCELLED) {
+            _state.update {
+                it.copy(
+                    emergencyCountdownState = EmergencyCountdownState.CANCELLED,
+                    emergencyCountdownRemainingMillis = decisionConfig.countdownDurationMillis,
+                    emergencyDispatchUiState = EmergencyDispatchUiState.CANCELLED,
+                    emergencyIncidentId = record.incidentId,
+                    isEmergencyModeActive = false
+                )
+            }
+            return
+        }
+        if (record.phase == EmergencyLifecyclePhase.COMPLETED) {
+            _state.update {
+                it.copy(
+                    emergencyCountdownState = EmergencyCountdownState.IDLE,
+                    emergencyCountdownRemainingMillis = decisionConfig.countdownDurationMillis,
+                    emergencyDispatchUiState = EmergencyDispatchUiState.IDLE,
+                    emergencyIncidentId = record.incidentId,
+                    isEmergencyModeActive = false
+                )
+            }
+            return
+        }
+        activeLifecycleIncidentId = record.incidentId
+        activeIncidentIdentity = "${record.windowStartEpochMillis}_${record.windowEndEpochMillis}"
+        val nowWall = emergencyLifecycleClock.wallClockMillis()
+        val nowElapsed = emergencyLifecycleClock.elapsedRealtimeMillis()
+        val remaining = EmergencyCountdownRecovery.remainingMillis(
+            record, nowWall, nowElapsed, emergencyLifecycleClock.bootCount(), decisionConfig.countdownDurationMillis
+        )
+        val recoveredPhase = if (record.dispatchState == EmergencyDispatchAttemptState.ATTEMPTED) {
+            repository.updateOutcome(record.incidentId, EmergencyLifecyclePhase.DISPATCH_UNKNOWN, EmergencyDispatchAttemptState.UNKNOWN, nowWall)
+            EmergencyLifecyclePhase.DISPATCH_UNKNOWN
+        } else if (record.phase == EmergencyLifecyclePhase.COUNTING_DOWN && remaining > 0L) {
+            EmergencyLifecyclePhase.COUNTING_DOWN
+        } else if (record.dispatchState == EmergencyDispatchAttemptState.SENT) {
+            EmergencyLifecyclePhase.DISPATCH_TRIGGERED
+        } else if (record.dispatchState == EmergencyDispatchAttemptState.FAILED) {
+            EmergencyLifecyclePhase.DISPATCH_FAILED
+        } else if (record.dispatchState == EmergencyDispatchAttemptState.UNKNOWN) {
+            EmergencyLifecyclePhase.DISPATCH_UNKNOWN
+        } else {
+            EmergencyLifecyclePhase.DISPATCHING
+        }
+
+        val windowStart = record.windowStartEpochMillis
+        val windowEnd = record.windowEndEpochMillis
+        val confidence = ConfidenceScore.fromRaw(record.confidenceScore)
+        val candidate = CandidateAccidentEvent(
+            windowStart, windowEnd, confidence,
+            TemporalMotionEvent(TemporalMotionEventType.POSSIBLE_IMPACT_SEQUENCE, windowStart, windowEnd, 0f, 0f, 1), 1
+        )
+        val qualified = QualifiedIncident(windowStart, windowEnd, confidence, 1, listOf(candidate))
+        lifecycleQualifiedIncident = qualified
+        val decision = com.manish.vahakvigil.domain.model.EmergencyDecision(
+            EmergencyDecisionState.EMERGENCY_CANDIDATE, "Recovered emergency lifecycle", windowEnd, PostImpactStatus.STILL
+        )
+        val activeCountdown = recoveredPhase == EmergencyLifecyclePhase.COUNTING_DOWN
+        val startTime = nowWall - (decisionConfig.countdownDurationMillis - remaining)
+        countdownEngine.restore(startTime, nowWall)
+        if (!activeCountdown) countdownEngine.expireImmediately()
+
+        val dispatchUiState = when (recoveredPhase) {
+            EmergencyLifecyclePhase.COUNTING_DOWN -> EmergencyDispatchUiState.COUNTING_DOWN
+            EmergencyLifecyclePhase.DISPATCHING -> EmergencyDispatchUiState.DISPATCHING
+            EmergencyLifecyclePhase.DISPATCH_TRIGGERED -> EmergencyDispatchUiState.DISPATCH_TRIGGERED
+            EmergencyLifecyclePhase.DISPATCH_FAILED -> EmergencyDispatchUiState.DISPATCH_FAILED
+            EmergencyLifecyclePhase.DISPATCH_UNKNOWN -> EmergencyDispatchUiState.DISPATCH_UNKNOWN
+            else -> EmergencyDispatchUiState.IDLE
+        }
+        val result = when (record.dispatchState) {
+            EmergencyDispatchAttemptState.SENT -> EmergencyActionResult(
+                EmergencyActionResultStatus.TRIGGERED, com.manish.vahakvigil.domain.model.EmergencyActionType.SMS,
+                record.dispatchResolvedAtEpochMillis ?: record.dispatchAttemptedAtEpochMillis ?: nowWall,
+                "SMS request accepted by Android messaging system; handset delivery is unconfirmed",
+                com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.SENT_TO_MESSAGING_SYSTEM
+            )
+            EmergencyDispatchAttemptState.FAILED -> EmergencyActionResult(
+                EmergencyActionResultStatus.FAILED, com.manish.vahakvigil.domain.model.EmergencyActionType.SMS,
+                record.dispatchResolvedAtEpochMillis ?: nowWall, "Emergency SMS request failed"
+            )
+            EmergencyDispatchAttemptState.UNKNOWN -> EmergencyActionResult(
+                EmergencyActionResultStatus.FAILED, com.manish.vahakvigil.domain.model.EmergencyActionType.SMS,
+                record.dispatchResolvedAtEpochMillis ?: nowWall, "SMS request outcome is unknown; it was not resent",
+                com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN
+            )
+            EmergencyDispatchAttemptState.ATTEMPTED -> EmergencyActionResult(
+                EmergencyActionResultStatus.FAILED, com.manish.vahakvigil.domain.model.EmergencyActionType.SMS,
+                record.dispatchAttemptedAtEpochMillis ?: nowWall, "SMS request outcome is unknown; it was not resent",
+                com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN
+            )
+            else -> null
+        }
+        _state.update {
+            it.copy(
+                latestQualifiedIncident = qualified,
+                latestEmergencyDecision = decision,
+                emergencyCountdownState = if (activeCountdown) EmergencyCountdownState.COUNTING_DOWN else EmergencyCountdownState.EXPIRED,
+                emergencyCountdownRemainingMillis = if (activeCountdown) remaining else 0L,
+                latestEmergencyActionResult = result,
+                isEmergencyModeActive = true,
+                emergencyDispatchUiState = dispatchUiState,
+                userAcknowledgedNeedHelp = record.userResponse == EmergencyUserResponse.NEED_HELP,
+                emergencyIncidentId = record.incidentId
+            )
+        }
+        if (activeCountdown) {
+            startCountdownTicker(nowWall)
+        } else if (record.dispatchState == EmergencyDispatchAttemptState.NOT_STARTED) {
+            pendingDispatchAfterRecovery = true
+        }
+    }
+
+    private fun newLifecycleRecord(phase: EmergencyLifecyclePhase, response: EmergencyUserResponse): EmergencyLifecycleRecord? {
+        val id = activeLifecycleIncidentId ?: return null
+        val incident = lifecycleQualifiedIncident ?: _state.value.latestQualifiedIncident ?: return null
+        val nowWall = emergencyLifecycleClock.wallClockMillis()
+        val remaining = countdownEngine.remainingMillis.coerceIn(0L, decisionConfig.countdownDurationMillis)
+        val elapsed = emergencyLifecycleClock.elapsedRealtimeMillis()
+        return EmergencyLifecycleRecord(
+            incidentId = id,
+            incidentCreatedAtEpochMillis = nowWall - (decisionConfig.countdownDurationMillis - remaining),
+            windowStartEpochMillis = incident.windowStartMs,
+            windowEndEpochMillis = incident.windowEndMs,
+            confidenceScore = incident.qualifyingConfidenceScore.value,
+            phase = phase,
+            deadlineElapsedRealtimeMillis = elapsed + remaining,
+            deadlineEpochMillis = nowWall + remaining,
+            bootCount = emergencyLifecycleClock.bootCount(),
+            userResponse = response
+        )
+    }
+
+    private fun persistLifecyclePhase(phase: EmergencyLifecyclePhase, response: EmergencyUserResponse) {
+        val repository = emergencyLifecycleRepository ?: return
+        val record = newLifecycleRecord(phase, response) ?: pendingLifecycleRecord ?: return
+        val scope = activeScope ?: return
+        scope.launch {
+            lifecycleMutex.withLock {
+                try {
+                    repository.createIfMissing(record)
+                    repository.updatePhaseAndResponse(record.incidentId, phase, response)
+                } catch (_: Exception) { }
             }
         }
     }
@@ -175,6 +369,8 @@ class CrashDetectionPipeline(
         countdownEngine.reset()
         actionOrchestrator.reset()
         activeIncidentIdentity = null
+        activeLifecycleIncidentId = null
+        lifecycleQualifiedIncident = null
         closedIncidentIdentity = null
         userDismissedEmergencyMode = false
 
@@ -269,6 +465,7 @@ class CrashDetectionPipeline(
             } else {
                 null
             }
+            if (currentQualifiedIncident != null) lifecycleQualifiedIncident = currentQualifiedIncident
 
             // ── Step 6: Post-impact motion observation ───────────────────
             val postImpactResult = if (currentQualifiedIncident != null) {
@@ -296,7 +493,9 @@ class CrashDetectionPipeline(
 
             // ── Step 8: Cancellation countdown ───────────────────────────
             var wasJustStarted = false
-            if (decision.state == EmergencyDecisionState.EMERGENCY_CANDIDATE) {
+            if (activeIncidentIdentity == null || activeIncidentIdentity == qualified.identity) {
+                decision.state == EmergencyDecisionState.EMERGENCY_CANDIDATE
+            ) {
                 if (countdownEngine.state == EmergencyCountdownState.IDLE) {
                     countdownEngine.start(reading.timestamp)
                     wasJustStarted = true
@@ -355,6 +554,7 @@ class CrashDetectionPipeline(
                 isNewIncident = isNewIncident
             )
 
+
             if (dispatchTimestamp != null) {
                 Pair(dispatchTimestamp, currentIncidentId)
             } else {
@@ -371,8 +571,20 @@ class CrashDetectionPipeline(
         countdownTickerJob?.cancel()
         val scope = activeScope ?: return
         val incidentId = activeIncidentIdentity
+        val lifecycleRepository = emergencyLifecycleRepository
+        if (lifecycleRepository != null && activeLifecycleIncidentId == null) {
+            activeLifecycleIncidentId = UUID.randomUUID().toString()
+            pendingLifecycleRecord = newLifecycleRecord(EmergencyLifecyclePhase.COUNTING_DOWN, EmergencyUserResponse.NONE)
+            _state.update { it.copy(emergencyIncidentId = activeLifecycleIncidentId) }
+        }
+        val lifecycleRecord = pendingLifecycleRecord
 
         countdownTickerJob = scope.launch(countdownDispatcher) {
+            if (lifecycleRepository != null && lifecycleRecord != null) {
+                lifecycleMutex.withLock {
+                    try { lifecycleRepository.createIfMissing(lifecycleRecord) } catch (_: Exception) { }
+                }
+            }
             val startWallClock = timeProvider()
             val tickInterval = 250L
 
@@ -444,7 +656,7 @@ class CrashDetectionPipeline(
         }
 
         dispatchJob = scope.launch {
-            val location = try {
+            val queriedLocation = try {
                 withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
                     locationProvider?.getCurrentLocation()
                 } ?: EmergencyLocation.Unavailable
@@ -452,6 +664,20 @@ class CrashDetectionPipeline(
                 throw e
             } catch (_: Exception) {
                 EmergencyLocation.Unavailable
+            }
+            val lifecycleId = activeLifecycleIncidentId
+            val location = if (queriedLocation is EmergencyLocation.Available && isAcceptableEmergencyLocation(queriedLocation)) queriedLocation else {
+                val cached = if (lifecycleId != null) {
+                    try { emergencyLifecycleRepository?.get(lifecycleId) } catch (_: Exception) { null }
+                } else null
+                val timestamp = cached?.lastLocationTimestampEpochMillis
+                val age = timestamp?.let { emergencyLifecycleClock.wallClockMillis() - it }
+                if (cached?.lastLatitude != null && cached.lastLongitude != null && age != null && age in 0L..MAX_LAST_KNOWN_LOCATION_AGE_MS) {
+                    EmergencyLocation.Available(
+                        cached.lastLatitude, cached.lastLongitude, timestampMs = timestamp,
+                        source = com.manish.vahakvigil.domain.model.EmergencyLocationSource.LAST_KNOWN
+                    )
+                } else EmergencyLocation.Unavailable
             }
 
             val payload = try {
@@ -474,14 +700,33 @@ class CrashDetectionPipeline(
                 try { smsFormatter.format(it) } catch (_: Exception) { null }
             }
 
-            synchronized(this@CrashDetectionPipeline) {
+            val lifecycleRepository = emergencyLifecycleRepository
+            var attemptClaimed = false
+            if (lifecycleRepository != null && lifecycleId != null) {
+                val record = pendingLifecycleRecord ?: newLifecycleRecord(EmergencyLifecyclePhase.DISPATCHING, if (_state.value.userAcknowledgedNeedHelp) EmergencyUserResponse.NEED_HELP else EmergencyUserResponse.NONE)
+                attemptClaimed = lifecycleMutex.withLock {
+                    try {
+                        if (record != null) lifecycleRepository.createIfMissing(record)
+                        if (location is EmergencyLocation.Available) {
+                            lifecycleRepository.updateLocation(lifecycleId, location.latitude, location.longitude, location.timestampMs)
+                        }
+                        lifecycleRepository.beginDispatchAttempt(lifecycleId, allowFailedRetry = false, attemptedAtEpochMillis = emergencyLifecycleClock.wallClockMillis())
+                    } catch (_: Exception) { false }
+                }
+                if (!attemptClaimed) {
+                    synchronized(this@CrashDetectionPipeline) { isDispatchInProgress = false }
+                    return@launch
+                }
+            }
+
+            val actionResult = synchronized(this@CrashDetectionPipeline) {
                 isDispatchInProgress = false
-                if (readingsJob?.isActive != true && countdownTickerJob?.isActive != true && activeScope?.isActive != true) return@synchronized
+                if (readingsJob?.isActive != true && countdownTickerJob?.isActive != true && activeScope?.isActive != true) return@synchronized null
                 if (activeIncidentIdentity != incidentId || activeIncidentIdentity == null) {
-                    return@synchronized
+                    return@synchronized null
                 }
                 if (countdownEngine.state != EmergencyCountdownState.EXPIRED) {
-                    return@synchronized
+                    return@synchronized null
                 }
 
                 val currentDecision = _state.value.latestEmergencyDecision
@@ -492,7 +737,7 @@ class CrashDetectionPipeline(
                 )
                 val dispatchUiState = when (actionResult.status) {
                     EmergencyActionResultStatus.TRIGGERED -> EmergencyDispatchUiState.DISPATCH_TRIGGERED
-                    EmergencyActionResultStatus.FAILED -> EmergencyDispatchUiState.DISPATCH_FAILED
+                    EmergencyActionResultStatus.FAILED -> if (actionResult.deliveryStatus == com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN) EmergencyDispatchUiState.DISPATCH_UNKNOWN else EmergencyDispatchUiState.DISPATCH_FAILED
                     EmergencyActionResultStatus.NOT_TRIGGERED -> EmergencyDispatchUiState.DISPATCHING
                 }
                 _state.update {
@@ -500,11 +745,45 @@ class CrashDetectionPipeline(
                         latestEmergencyDispatchPayload = payload,
                         latestEmergencySmsMessage = smsMessage,
                         latestEmergencyActionResult = actionResult,
-                        emergencyDispatchUiState = dispatchUiState
+                        emergencyDispatchUiState = dispatchUiState,
+                        emergencyIncidentId = lifecycleId ?: it.emergencyIncidentId
                     )
                 }
+                actionResult
+            }
+            if (lifecycleRepository != null && lifecycleId != null && attemptClaimed) {
+                val resolvedAt = emergencyLifecycleClock.wallClockMillis()
+                val (phase, state) = when {
+                    actionResult == null && _state.value.emergencyDispatchUiState == EmergencyDispatchUiState.CANCELLED -> EmergencyLifecyclePhase.CANCELLED to EmergencyDispatchAttemptState.FAILED
+                    actionResult == null -> EmergencyLifecyclePhase.DISPATCH_FAILED to EmergencyDispatchAttemptState.FAILED
+                    actionResult.status == EmergencyActionResultStatus.TRIGGERED -> EmergencyLifecyclePhase.DISPATCH_TRIGGERED to EmergencyDispatchAttemptState.SENT
+                    actionResult.deliveryStatus == com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN -> EmergencyLifecyclePhase.DISPATCH_UNKNOWN to EmergencyDispatchAttemptState.UNKNOWN
+                    else -> EmergencyLifecyclePhase.DISPATCH_FAILED to EmergencyDispatchAttemptState.FAILED
+                }
+                try { lifecycleRepository.updateOutcome(lifecycleId, phase, state, resolvedAt) } catch (_: Exception) { }
             }
         }
+    }
+
+    /** Persist only valid live ride fixes while an emergency countdown is active. */
+    fun recordEmergencyLocation(location: com.manish.vahakvigil.domain.model.RideLocationState.Available) {
+        if (!com.manish.vahakvigil.domain.model.EmergencyLocation.isValidCoordinate(location.latitude, location.longitude)) return
+        val repository = emergencyLifecycleRepository ?: return
+        val id = activeLifecycleIncidentId ?: return
+        activeScope?.launch {
+            lifecycleMutex.withLock {
+                try {
+                    pendingLifecycleRecord?.let { repository.createIfMissing(it) }
+                    repository.updateLocation(id, location.latitude, location.longitude, location.timestampMs)
+                } catch (_: Exception) { }
+            }
+        }
+    }
+
+    private fun isAcceptableEmergencyLocation(location: EmergencyLocation.Available): Boolean {
+        if (location.source != com.manish.vahakvigil.domain.model.EmergencyLocationSource.LAST_KNOWN) return true
+        val age = location.timestampMs?.let { emergencyLifecycleClock.wallClockMillis() - it } ?: return false
+        return age in 0L..MAX_LAST_KNOWN_LOCATION_AGE_MS
     }
 
     private fun updatePipelineDetectionState(
@@ -525,7 +804,7 @@ class CrashDetectionPipeline(
                 countdownEngine.state == EmergencyCountdownState.EXPIRED -> {
                     when (actionResult?.status) {
                         EmergencyActionResultStatus.TRIGGERED -> EmergencyDispatchUiState.DISPATCH_TRIGGERED
-                        EmergencyActionResultStatus.FAILED -> EmergencyDispatchUiState.DISPATCH_FAILED
+                    EmergencyActionResultStatus.FAILED -> if (actionResult.deliveryStatus == com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN) EmergencyDispatchUiState.DISPATCH_UNKNOWN else EmergencyDispatchUiState.DISPATCH_FAILED
                         EmergencyActionResultStatus.NOT_TRIGGERED -> EmergencyDispatchUiState.DISPATCHING
                         null -> EmergencyDispatchUiState.DISPATCHING
                     }
@@ -576,6 +855,7 @@ class CrashDetectionPipeline(
 
     @Synchronized
     fun acknowledgeNeedHelp() {
+        persistLifecyclePhase(EmergencyLifecyclePhase.COUNTING_DOWN, EmergencyUserResponse.NEED_HELP)
         _state.update {
             it.copy(userAcknowledgedNeedHelp = true)
         }
@@ -604,6 +884,7 @@ class CrashDetectionPipeline(
 
         // 2. Immediately transition countdown engine to EXPIRED with 0ms remaining
         countdownEngine.expireImmediately()
+        persistLifecyclePhase(EmergencyLifecyclePhase.DISPATCHING, EmergencyUserResponse.NEED_HELP)
 
         // 3. Capture incident timestamp for dispatch payload compilation
         val dispatchTimestamp = _state.value.latestEmergencyDecision?.incidentTimestampMs ?: timeProvider()
@@ -631,6 +912,7 @@ class CrashDetectionPipeline(
         }
         val wasActive = countdownEngine.state == EmergencyCountdownState.COUNTING_DOWN ||
             countdownEngine.state == EmergencyCountdownState.EXPIRED
+        if (wasActive) persistLifecyclePhase(EmergencyLifecyclePhase.CANCELLED, EmergencyUserResponse.IM_FINE)
         closedIncidentIdentity = activeIncidentIdentity
         activeIncidentIdentity = null
 
@@ -651,6 +933,9 @@ class CrashDetectionPipeline(
         qualificationEngine.reset()
         countdownEngine.reset()
         userDismissedEmergencyMode = false
+        activeLifecycleIncidentId = null
+        pendingLifecycleRecord = null
+        lifecycleQualifiedIncident = null
 
         _state.update {
             it.copy(
@@ -670,6 +955,7 @@ class CrashDetectionPipeline(
 
     @Synchronized
     fun dismissEmergencyMode() {
+        persistLifecyclePhase(EmergencyLifecyclePhase.COMPLETED, if (_state.value.userAcknowledgedNeedHelp) EmergencyUserResponse.NEED_HELP else EmergencyUserResponse.NONE)
         closedIncidentIdentity = activeIncidentIdentity
         activeIncidentIdentity = null
         userDismissedEmergencyMode = true
@@ -685,6 +971,9 @@ class CrashDetectionPipeline(
         postImpactBuffer.clear()
         qualificationEngine.reset()
         actionOrchestrator.reset()
+        activeLifecycleIncidentId = null
+        pendingLifecycleRecord = null
+        lifecycleQualifiedIncident = null
 
         _state.update {
             it.copy(
@@ -708,6 +997,52 @@ class CrashDetectionPipeline(
         if (decision?.state == EmergencyDecisionState.EMERGENCY_CANDIDATE &&
             countdownEngine.state == EmergencyCountdownState.EXPIRED
         ) {
+            val lifecycleRepository = emergencyLifecycleRepository
+            val lifecycleId = activeLifecycleIncidentId
+            val scope = activeScope
+            if (lifecycleRepository != null && (lifecycleId == null || scope == null)) return
+            if (lifecycleRepository != null && lifecycleId != null && scope != null) {
+                if (_state.value.emergencyDispatchUiState != EmergencyDispatchUiState.DISPATCH_FAILED) return
+                if (isDispatchInProgress) return
+                isDispatchInProgress = true
+                scope.launch {
+                    val claimed = lifecycleMutex.withLock {
+                        try {
+                            pendingLifecycleRecord?.let { lifecycleRepository.createIfMissing(it) }
+                            lifecycleRepository.beginDispatchAttempt(lifecycleId, allowFailedRetry = true, attemptedAtEpochMillis = emergencyLifecycleClock.wallClockMillis())
+                        } catch (_: Exception) { false }
+                    }
+                    if (!claimed) {
+                        synchronized(this@CrashDetectionPipeline) { isDispatchInProgress = false }
+                        return@launch
+                    }
+                    val result = actionOrchestrator.evaluate(
+                        decision = decision,
+                        countdownState = EmergencyCountdownState.EXPIRED,
+                        dispatchPayload = payload
+                    )
+                    val (phase, state) = when {
+                        result.status == EmergencyActionResultStatus.TRIGGERED -> EmergencyLifecyclePhase.DISPATCH_TRIGGERED to EmergencyDispatchAttemptState.SENT
+                        result.deliveryStatus == com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN -> EmergencyLifecyclePhase.DISPATCH_UNKNOWN to EmergencyDispatchAttemptState.UNKNOWN
+                        else -> EmergencyLifecyclePhase.DISPATCH_FAILED to EmergencyDispatchAttemptState.FAILED
+                    }
+                    try { lifecycleRepository.updateOutcome(lifecycleId, phase, state, emergencyLifecycleClock.wallClockMillis()) } catch (_: Exception) { }
+                    synchronized(this@CrashDetectionPipeline) {
+                        isDispatchInProgress = false
+                        _state.update {
+                            it.copy(
+                                latestEmergencyActionResult = result,
+                                emergencyDispatchUiState = when (phase) {
+                                    EmergencyLifecyclePhase.DISPATCH_TRIGGERED -> EmergencyDispatchUiState.DISPATCH_TRIGGERED
+                                    EmergencyLifecyclePhase.DISPATCH_FAILED -> EmergencyDispatchUiState.DISPATCH_FAILED
+                                    else -> EmergencyDispatchUiState.DISPATCH_UNKNOWN
+                                }
+                            )
+                        }
+                    }
+                }
+                return
+            }
             val result = actionOrchestrator.evaluate(
                 decision = decision,
                 countdownState = EmergencyCountdownState.EXPIRED,
@@ -715,7 +1050,7 @@ class CrashDetectionPipeline(
             )
             val newDispatchUiState = when (result.status) {
                 EmergencyActionResultStatus.TRIGGERED -> EmergencyDispatchUiState.DISPATCH_TRIGGERED
-                EmergencyActionResultStatus.FAILED -> EmergencyDispatchUiState.DISPATCH_FAILED
+                EmergencyActionResultStatus.FAILED -> if (result.deliveryStatus == com.manish.vahakvigil.domain.model.EmergencyDeliveryStatus.DELIVERY_UNKNOWN) EmergencyDispatchUiState.DISPATCH_UNKNOWN else EmergencyDispatchUiState.DISPATCH_FAILED
                 EmergencyActionResultStatus.NOT_TRIGGERED -> EmergencyDispatchUiState.DISPATCHING
             }
             _state.update {
@@ -756,5 +1091,6 @@ class CrashDetectionPipeline(
 
     companion object {
         const val LOCATION_TIMEOUT_MS = 5_000L
+        const val MAX_LAST_KNOWN_LOCATION_AGE_MS = 15 * 60_000L
     }
 }

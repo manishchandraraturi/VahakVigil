@@ -11,12 +11,14 @@ import com.manish.vahakvigil.data.local.db.dao.MedicalProfileDao
 import com.manish.vahakvigil.data.local.db.dao.RideSessionDao
 import com.manish.vahakvigil.data.local.db.dao.EmergencyIncidentDao
 import com.manish.vahakvigil.data.local.db.dao.SensorEventDao
+import com.manish.vahakvigil.data.local.db.dao.EmergencyLifecycleDao
 import com.manish.vahakvigil.data.local.db.entity.ContactEntity
 import com.manish.vahakvigil.data.local.db.entity.MedicalProfileEntity
 import com.manish.vahakvigil.data.local.db.entity.RideSessionEntity
 import com.manish.vahakvigil.data.local.db.entity.RideSessionPointEntity
 import com.manish.vahakvigil.data.local.db.entity.EmergencyIncidentEntity
 import com.manish.vahakvigil.data.local.db.entity.SensorEventEntity
+import com.manish.vahakvigil.data.local.db.entity.EmergencyLifecycleEntity
 
 /**
  * Main Room database definition for VahakVigil.
@@ -32,9 +34,10 @@ import com.manish.vahakvigil.data.local.db.entity.SensorEventEntity
         RideSessionEntity::class,
         RideSessionPointEntity::class,
         EmergencyIncidentEntity::class,
-        SensorEventEntity::class
+        SensorEventEntity::class,
+        EmergencyLifecycleEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,6 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun rideSessionDao(): RideSessionDao
     abstract fun emergencyIncidentDao(): EmergencyIncidentDao
+    abstract fun emergencyLifecycleDao(): EmergencyLifecycleDao
     abstract fun sensorEventDao(): SensorEventDao
 
     companion object {
@@ -98,6 +102,32 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `emergency_lifecycle` (" +
+                        "`incidentId` TEXT NOT NULL, " +
+                        "`incidentCreatedAtEpochMillis` INTEGER NOT NULL, " +
+                        "`windowStartEpochMillis` INTEGER NOT NULL, " +
+                        "`windowEndEpochMillis` INTEGER NOT NULL, " +
+                        "`confidenceScore` REAL NOT NULL, " +
+                        "`phase` TEXT NOT NULL, " +
+                        "`deadlineElapsedRealtimeMillis` INTEGER NOT NULL, " +
+                        "`deadlineEpochMillis` INTEGER NOT NULL, " +
+                        "`bootCount` INTEGER NOT NULL, " +
+                        "`userResponse` TEXT NOT NULL, " +
+                        "`dispatchState` TEXT NOT NULL, " +
+                        "`dispatchAttemptCount` INTEGER NOT NULL, " +
+                        "`dispatchAttemptedAtEpochMillis` INTEGER, " +
+                        "`dispatchResolvedAtEpochMillis` INTEGER, " +
+                        "`lastLatitude` REAL, " +
+                        "`lastLongitude` REAL, " +
+                        "`lastLocationTimestampEpochMillis` INTEGER, " +
+                        "PRIMARY KEY(`incidentId`))"
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -108,7 +138,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 .also { instance = it }
             }

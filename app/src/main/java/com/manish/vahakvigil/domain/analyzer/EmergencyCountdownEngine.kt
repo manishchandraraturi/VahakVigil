@@ -43,6 +43,13 @@ class EmergencyCountdownEngine(
         this.remainingMillis = durationMillis
     }
 
+    /** Restores an active countdown without changing its configured total duration. */
+    fun restore(startTimestampMillis: Long, currentTimestampMillis: Long) {
+        reset()
+        start(startTimestampMillis)
+        update(currentTimestampMillis)
+    }
+
     /**
      * Updates the countdown given the current [currentTimestampMillis].
      *

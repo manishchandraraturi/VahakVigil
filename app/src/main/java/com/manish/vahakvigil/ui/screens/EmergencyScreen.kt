@@ -73,6 +73,8 @@ import com.manish.vahakvigil.domain.repository.EmergencyIncidentRepository
 import kotlinx.coroutines.launch
 import com.manish.vahakvigil.domain.model.EmergencyCapabilityStatus
 import com.manish.vahakvigil.domain.model.EmergencyDispatchUiState
+import com.manish.vahakvigil.domain.model.EmergencyLocation
+import com.manish.vahakvigil.domain.model.EmergencyLocationSource
 import com.manish.vahakvigil.domain.model.EmergencyHospital
 import com.manish.vahakvigil.ui.components.SlideCommit
 import com.manish.vahakvigil.ui.screens.home.HomeViewModel
@@ -192,6 +194,7 @@ fun EmergencyScreen(
             }
             EmergencyDispatchUiState.DISPATCH_TRIGGERED,
             EmergencyDispatchUiState.DISPATCH_FAILED,
+            EmergencyDispatchUiState.DISPATCH_UNKNOWN,
             EmergencyDispatchUiState.CANCELLED,
             EmergencyDispatchUiState.IDLE -> {
                 feedbackController.stopAlert()
@@ -705,6 +708,8 @@ fun EmergencyScreen(
                                     color = Color(0xFFB0BEC5),
                                     lineHeight = 18.sp
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                EmergencyLocationStatus(uiState.latestEmergencyDispatchPayload?.location)
                             }
                         }
                     }
@@ -772,7 +777,9 @@ fun EmergencyScreen(
                     }
                 }
 
-                EmergencyDispatchUiState.DISPATCH_FAILED -> {
+                EmergencyDispatchUiState.DISPATCH_FAILED,
+                EmergencyDispatchUiState.DISPATCH_UNKNOWN -> {
+                    val isOutcomeUnknown = uiState.emergencyDispatchUiState == EmergencyDispatchUiState.DISPATCH_UNKNOWN
                     // Post-Expiration: Dispatch Failed
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -796,7 +803,7 @@ fun EmergencyScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = stringResource(R.string.emergency_not_sent),
+                            text = stringResource(if (isOutcomeUnknown) R.string.emergency_dispatch_unknown_title else R.string.emergency_not_sent),
                             fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFFFF5252),
@@ -807,7 +814,7 @@ fun EmergencyScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = stringResource(R.string.emergency_failed),
+                            text = stringResource(if (isOutcomeUnknown) R.string.emergency_dispatch_unknown_body else R.string.emergency_failed),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFFE0E0E0),
@@ -838,14 +845,14 @@ fun EmergencyScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = stringResource(R.string.emergency_dispatch_failed_title),
+                                text = stringResource(if (isOutcomeUnknown) R.string.emergency_dispatch_unknown_title else R.string.emergency_dispatch_failed_title),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFFF8A80)
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = stringResource(R.string.emergency_dispatch_failed_body),
+                                text = stringResource(if (isOutcomeUnknown) R.string.emergency_dispatch_unknown_body else R.string.emergency_dispatch_failed_body),
                                     fontSize = 13.sp,
                                     color = Color(0xFFB0BEC5),
                                     lineHeight = 18.sp
@@ -860,7 +867,7 @@ fun EmergencyScreen(
                             .padding(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Button(
+                        if (!isOutcomeUnknown) Button(
                             onClick = {
                                 viewModel.retryEmergencyDispatch()
                             },
@@ -974,6 +981,20 @@ fun EmergencyScreen(
             }
         )
     }
+}
+
+@Composable
+private fun EmergencyLocationStatus(location: EmergencyLocation?) {
+    val text = when (location) {
+        is EmergencyLocation.Available -> if (location.source == EmergencyLocationSource.LAST_KNOWN) {
+            val capturedAt = location.timestampMs?.let {
+                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(it))
+            }.orEmpty()
+            stringResource(R.string.emergency_location_last_known, capturedAt)
+        } else stringResource(R.string.emergency_location_current)
+        else -> stringResource(R.string.emergency_location_unavailable)
+    }
+    Text(text, fontSize = 12.sp, color = Color(0xFFB0BEC5), lineHeight = 17.sp)
 }
 
 private fun launchIncidentSpeech(

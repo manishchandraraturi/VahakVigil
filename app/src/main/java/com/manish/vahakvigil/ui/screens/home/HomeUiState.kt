@@ -55,6 +55,7 @@ data class HomeUiState(
     val isEmergencyModeActive: Boolean = false,
     val userAcknowledgedNeedHelp: Boolean = false,
     val emergencyDispatchUiState: EmergencyDispatchUiState = EmergencyDispatchUiState.IDLE,
+    val emergencyIncidentId: String? = null,
     val currentDateFormatted: String = "",
     val currentTimeFormatted: String = "",
     val timeRegionFormatted: String = "",

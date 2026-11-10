@@ -235,6 +235,7 @@ class HomeViewModel(
                         latestEmergencySmsMessage = detectionState.latestEmergencySmsMessage,
                         isEmergencyModeActive = detectionState.isEmergencyModeActive,
                         emergencyDispatchUiState = detectionState.emergencyDispatchUiState,
+                        emergencyIncidentId = detectionState.emergencyIncidentId,
                         userAcknowledgedNeedHelp = detectionState.userAcknowledgedNeedHelp
                     )
                 }

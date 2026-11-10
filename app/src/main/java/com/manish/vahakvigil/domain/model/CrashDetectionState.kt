@@ -21,5 +21,6 @@ data class CrashDetectionState(
     val latestEmergencySmsMessage: EmergencySmsMessage? = null,
     val isEmergencyModeActive: Boolean = false,
     val emergencyDispatchUiState: EmergencyDispatchUiState = EmergencyDispatchUiState.IDLE,
-    val userAcknowledgedNeedHelp: Boolean = false
+    val userAcknowledgedNeedHelp: Boolean = false,
+    val emergencyIncidentId: String? = null
 )

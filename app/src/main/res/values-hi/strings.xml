@@ -171,6 +171,11 @@
     <string name="emergency_alert_initiated_body">आपके तय आपातकालीन संपर्कों को सूचना भेजने का अनुरोध किया गया।</string>
     <string name="emergency_status_triggered">भेजने की स्थिति: अनुरोध भेजा गया</string>
     <string name="emergency_delivery_note">सूचना मोबाइल नेटवर्क को सौंपी गई। पहुँचने की पुष्टि नेटवर्क सेवा पर निर्भर है।</string>
+    <string name="emergency_dispatch_unknown_title">SMS की स्थिति अज्ञात है</string>
+    <string name="emergency_dispatch_unknown_body">रुकावट से पहले मैसेजिंग सेवा ने अलर्ट स्वीकार किया हो सकता है। डुप्लिकेट अलर्ट से बचने के लिए VahakVigil इसे अपने आप दोबारा नहीं भेजेगा।</string>
+    <string name="emergency_location_current">वर्तमान लोकेशन फिक्स शामिल है।</string>
+    <string name="emergency_location_last_known">%1$s पर दर्ज पिछली ज्ञात लोकेशन शामिल है। यह राइडर की वर्तमान स्थिति न भी हो सकती है।</string>
+    <string name="emergency_location_unavailable">कोई मान्य लोकेशन उपलब्ध नहीं थी। लोकेशन खोजते हुए आपातकालीन अलर्ट में देरी नहीं की गई।</string>
     <string name="action_return_home">मुख्य स्क्रीन पर लौटें</string>
     <string name="emergency_call_direct">यदि आप बात कर सकते हैं, तो आपातकालीन सेवा को सीधे कॉल करें।</string>
     <string name="emergency_not_sent">आपातकालीन सूचना नहीं भेजी गई</string>

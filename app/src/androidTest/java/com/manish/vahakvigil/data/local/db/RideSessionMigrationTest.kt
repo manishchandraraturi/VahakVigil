@@ -48,8 +48,30 @@ class RideSessionMigrationTest {
         migrated.close()
     }
 
+    @Test
+    fun migrationSixToSevenAddsEmergencyLifecycleWithoutChangingExistingIncidentData() {
+        helper.createDatabase(TEST_DB_V6, 6).apply {
+            execSQL("INSERT INTO emergency_incidents (incidentId, incidentTimestampEpochMillis, windowStartEpochMillis, windowEndEpochMillis, confidenceScore, evidenceSummary, status, userAction) VALUES ('existing-incident', 2000, 1900, 2000, 0.7, 'keep this history', 'COUNTING_DOWN', 'NO_ACTION_RECORDED')")
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB_V6, 7, true, AppDatabase.MIGRATION_6_7)
+        migrated.query("SELECT evidenceSummary FROM emergency_incidents WHERE incidentId = 'existing-incident'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("keep this history", cursor.getString(0))
+        }
+        migrated.execSQL("INSERT INTO emergency_lifecycle (incidentId, incidentCreatedAtEpochMillis, windowStartEpochMillis, windowEndEpochMillis, confidenceScore, phase, deadlineElapsedRealtimeMillis, deadlineEpochMillis, bootCount, userResponse, dispatchState, dispatchAttemptCount) VALUES ('lifecycle-1', 2000, 1900, 2000, 0.7, 'COUNTING_DOWN', 75000, 77000, 1, 'NONE', 'NOT_STARTED', 0)")
+        migrated.query("SELECT phase, dispatchState FROM emergency_lifecycle WHERE incidentId = 'lifecycle-1'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("COUNTING_DOWN", cursor.getString(0))
+            assertEquals("NOT_STARTED", cursor.getString(1))
+        }
+        migrated.close()
+    }
+
     private companion object {
         const val TEST_DB = "ride-session-migration-test"
         const val TEST_DB_V4 = "incident-history-migration-test"
+        const val TEST_DB_V6 = "emergency-lifecycle-migration-test"
     }
 }
