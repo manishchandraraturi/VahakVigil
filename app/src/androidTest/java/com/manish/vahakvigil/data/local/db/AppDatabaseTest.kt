@@ -9,6 +9,10 @@ import com.manish.vahakvigil.data.local.db.dao.MedicalProfileDao
 import com.manish.vahakvigil.data.local.db.entity.ContactEntity
 import com.manish.vahakvigil.data.local.db.entity.MedicalProfileEntity
 import com.manish.vahakvigil.data.repository.RideSessionRepositoryImpl
+import com.manish.vahakvigil.data.repository.SensorEventRepositoryImpl
+import com.manish.vahakvigil.domain.model.RawSensorEvent
+import com.manish.vahakvigil.domain.model.RawSensorType
+import com.manish.vahakvigil.domain.model.SensorEventExportCursor
 import com.manish.vahakvigil.domain.model.RideSessionPoint
 import com.manish.vahakvigil.domain.model.RideSessionStatus
 import com.manish.vahakvigil.data.repository.EmergencyIncidentRepositoryImpl
@@ -206,6 +210,89 @@ class AppDatabaseTest {
         assertTrue(repository.getPoints(ride.id).isEmpty())
         assertNull(repository.getSession(ride.id))
     }
+
+    @Test
+    fun sensorEventBatchIsOrderedPagedAndIsolatedByRideSession() = runTest {
+        val rideRepository = RideSessionRepositoryImpl(db, db.rideSessionDao())
+        val eventRepository = SensorEventRepositoryImpl(db.sensorEventDao())
+        val firstRide = rideRepository.startOrResume(1_000L)
+        rideRepository.finish(firstRide.id, 1_001L, interrupted = true)
+        val secondRide = rideRepository.startOrResume(2_000L)
+        val earlier = rawEvent(RawSensorType.ACCELEROMETER, 10L)
+        val later = rawEvent(RawSensorType.GYROSCOPE, 20L)
+        val tiedLater = rawEvent(RawSensorType.ACCELEROMETER, 20L)
+
+        eventRepository.insertBatch(firstRide.id, listOf(later, earlier, tiedLater))
+        eventRepository.insertBatch(secondRide.id, listOf(rawEvent(RawSensorType.GYROSCOPE, 30L)))
+
+        assertEquals(3L, eventRepository.countForSession(firstRide.id))
+        assertEquals(1L, eventRepository.countForSession(secondRide.id))
+        assertEquals(
+            listOf(10L, 20L),
+            eventRepository.getEventsForSession(firstRide.id, limit = 2, offset = 0).map { it.timestampNanos }
+        )
+        assertEquals(
+            listOf(20L),
+            eventRepository.getEventsForSession(firstRide.id, limit = 2, offset = 2).map { it.timestampNanos }
+        )
+        assertEquals(
+            listOf(30L),
+            eventRepository.getEventsForSession(secondRide.id, limit = 10, offset = 0).map { it.timestampNanos }
+        )
+    }
+
+    @Test
+    fun deletingRideCascadesItsSensorEvents() = runTest {
+        val rideRepository = RideSessionRepositoryImpl(db, db.rideSessionDao())
+        val eventRepository = SensorEventRepositoryImpl(db.sensorEventDao())
+        val ride = rideRepository.startOrResume(1_000L)
+        eventRepository.insertBatch(ride.id, listOf(rawEvent(RawSensorType.ACCELEROMETER, 10L)))
+
+        assertEquals(1L, eventRepository.countForSession(ride.id))
+        rideRepository.deleteSession(ride.id)
+        assertEquals(0L, eventRepository.countForSession(ride.id))
+    }
+
+    @Test
+    fun sensorEventExportKeysetIsStableForEqualTimestampsAndSnapshotBoundary() = runTest {
+        val ride = RideSessionRepositoryImpl(db, db.rideSessionDao()).startOrResume(1_000L)
+        val events = SensorEventRepositoryImpl(db.sensorEventDao())
+        events.insertBatch(
+            ride.id,
+            listOf(
+                rawEvent(RawSensorType.ACCELEROMETER, 10_000_000L),
+                rawEvent(RawSensorType.GYROSCOPE, 10_000_000L),
+                rawEvent(RawSensorType.ACCELEROMETER, 10_000_000L)
+            )
+        )
+        val snapshot = events.getExportSnapshot(ride.id)
+        val first = events.getExportPage(ride.id, snapshot.maxEventId, after = null, limit = 2)
+        events.insertBatch(ride.id, listOf(rawEvent(RawSensorType.GYROSCOPE, 1_000_000L)))
+        val last = first.last()
+        val second = events.getExportPage(
+            ride.id,
+            snapshot.maxEventId,
+            SensorEventExportCursor(last.event.timestampNanos, last.eventId),
+            limit = 2
+        )
+
+        assertEquals(3L, snapshot.eventCount)
+        assertEquals(2, first.size)
+        assertEquals(1, second.size)
+        assertTrue(first.zipWithNext().all { (a, b) -> a.eventId < b.eventId })
+        assertTrue(second.single().eventId > first.last().eventId)
+        assertTrue(second.none { it.event.timestampNanos == 1_000_000L })
+    }
+
+    private fun rawEvent(type: RawSensorType, timestampNanos: Long) = RawSensorEvent(
+        type = type,
+        timestampNanos = timestampNanos,
+        timestampEpochMillis = timestampNanos / 1_000_000L,
+        x = timestampNanos.toFloat(),
+        y = 2f,
+        z = 3f,
+        accuracy = 3
+    )
 
     @Test
     fun emergencyIncidentKeepsEvidenceAttachedAndDeletesByIncidentId() = runTest {

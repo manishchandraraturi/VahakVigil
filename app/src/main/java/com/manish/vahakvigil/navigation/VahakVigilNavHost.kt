@@ -302,7 +302,8 @@ fun VahakVigilNavHost(
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
                 factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
                     app.rideSessionRepository,
-                    app.sensorCsvDocumentExporter
+                    app.sensorCsvDocumentExporter,
+                    app.sensorEventRepository
                 )
             )
             RideHistoryScreen(
@@ -317,7 +318,8 @@ fun VahakVigilNavHost(
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
                 factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
                     app.rideSessionRepository,
-                    app.sensorCsvDocumentExporter
+                    app.sensorCsvDocumentExporter,
+                    app.sensorEventRepository
                 )
             )
             com.manish.vahakvigil.ui.screens.RideCompletionScreen(
@@ -342,7 +344,8 @@ fun VahakVigilNavHost(
             val rideHistoryViewModel: com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel = viewModel(
                 factory = com.manish.vahakvigil.ui.screens.ridehistory.RideHistoryViewModel.provideFactory(
                     app.rideSessionRepository,
-                    app.sensorCsvDocumentExporter
+                    app.sensorCsvDocumentExporter,
+                    app.sensorEventRepository
                 )
             )
             RideDetailScreen(

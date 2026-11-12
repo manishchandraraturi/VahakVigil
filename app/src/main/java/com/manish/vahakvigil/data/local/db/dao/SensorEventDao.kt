@@ -34,6 +34,17 @@ interface SensorEventDao {
         limit: Int
     ): List<SensorEventEntity>
 
+    @Query(
+        "SELECT * FROM sensor_events WHERE sessionId = :sessionId AND eventId <= :maxEventId " +
+            "AND eventId > :afterEventId ORDER BY eventId ASC LIMIT :limit"
+    )
+    suspend fun getAnalysisPage(
+        sessionId: String,
+        maxEventId: Long,
+        afterEventId: Long,
+        limit: Int
+    ): List<SensorEventEntity>
+
     @Query("SELECT COUNT(*) FROM sensor_events WHERE sessionId = :sessionId")
     suspend fun countForSession(sessionId: String): Long
 }

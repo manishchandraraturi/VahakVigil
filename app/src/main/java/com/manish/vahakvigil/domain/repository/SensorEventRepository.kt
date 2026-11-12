@@ -3,6 +3,7 @@ package com.manish.vahakvigil.domain.repository
 import com.manish.vahakvigil.domain.model.RawSensorEvent
 import com.manish.vahakvigil.domain.model.RecordedSensorEvent
 import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
 import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 
 /** Persistent raw sensor events scoped to an existing ride session. */
@@ -23,6 +24,13 @@ interface SensorEventRepository {
         sessionId: String,
         maxEventId: Long,
         after: SensorEventExportCursor?,
+        limit: Int
+    ): List<RecordedSensorEvent>
+
+    suspend fun getAnalysisPage(
+        sessionId: String,
+        maxEventId: Long,
+        after: SensorEventAnalysisCursor,
         limit: Int
     ): List<RecordedSensorEvent>
 }

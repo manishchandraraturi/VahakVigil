@@ -49,6 +49,59 @@ class RideSessionMigrationTest {
     }
 
     @Test
+    fun migrationFiveToSixPreservesRideDataAddsOrderedSensorEventsAndCascadesDelete() {
+        helper.createDatabase(TEST_DB_V5, 5).apply {
+            execSQL("INSERT INTO ride_sessions (id, startedAtEpochMillis, durationMillis, status) VALUES ('ride-5', 1000, 0, 'ACTIVE')")
+            execSQL("INSERT INTO ride_session_points (sessionId, latitude, longitude, timestampEpochMillis) VALUES ('ride-5', 12.0, 77.0, 1001)")
+            execSQL("INSERT INTO emergency_incidents (incidentId, incidentTimestampEpochMillis, windowStartEpochMillis, windowEndEpochMillis, confidenceScore, evidenceSummary, status, userAction) VALUES ('incident-5', 1100, 900, 1100, 0.8, 'existing incident', 'COUNTING_DOWN', 'NO_ACTION_RECORDED')")
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB_V5, 6, true, AppDatabase.MIGRATION_5_6)
+        migrated.query("SELECT id, startedAtEpochMillis FROM ride_sessions WHERE id = 'ride-5'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("ride-5", cursor.getString(0))
+            assertEquals(1000L, cursor.getLong(1))
+        }
+        migrated.query("SELECT latitude, longitude FROM ride_session_points WHERE sessionId = 'ride-5'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals(12.0, cursor.getDouble(0), 0.0)
+            assertEquals(77.0, cursor.getDouble(1), 0.0)
+        }
+        migrated.query("SELECT evidenceSummary FROM emergency_incidents WHERE incidentId = 'incident-5'").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("existing incident", cursor.getString(0))
+        }
+
+        migrated.execSQL("INSERT INTO sensor_events (sessionId, sensorType, timestampNanos, timestampEpochMillis, x, y, z, accuracy) VALUES ('ride-5', 'GYROSCOPE', 20, 2000, 0.1, 0.2, 0.3, 3)")
+        migrated.execSQL("INSERT INTO sensor_events (sessionId, sensorType, timestampNanos, timestampEpochMillis, x, y, z, accuracy) VALUES ('ride-5', 'ACCELEROMETER', 10, 1999, 1.0, 2.0, 3.0, 2)")
+        migrated.query("SELECT sensorType, timestampNanos FROM sensor_events WHERE sessionId = 'ride-5' ORDER BY timestampNanos ASC, eventId ASC").use { cursor ->
+            assertEquals(true, cursor.moveToFirst())
+            assertEquals("ACCELEROMETER", cursor.getString(0))
+            assertEquals(10L, cursor.getLong(1))
+            assertEquals(true, cursor.moveToNext())
+            assertEquals("GYROSCOPE", cursor.getString(0))
+            assertEquals(20L, cursor.getLong(1))
+            assertEquals(false, cursor.moveToNext())
+        }
+        migrated.query("SELECT COUNT(*) FROM sensor_events WHERE sessionId = 'ride-5'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(2, cursor.getInt(0))
+        }
+
+        migrated.execSQL("DELETE FROM ride_sessions WHERE id = 'ride-5'")
+        migrated.query("SELECT COUNT(*) FROM sensor_events WHERE sessionId = 'ride-5'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.query("SELECT COUNT(*) FROM ride_session_points WHERE sessionId = 'ride-5'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+        migrated.close()
+    }
+
+    @Test
     fun migrationSixToSevenAddsEmergencyLifecycleWithoutChangingExistingIncidentData() {
         helper.createDatabase(TEST_DB_V6, 6).apply {
             execSQL("INSERT INTO emergency_incidents (incidentId, incidentTimestampEpochMillis, windowStartEpochMillis, windowEndEpochMillis, confidenceScore, evidenceSummary, status, userAction) VALUES ('existing-incident', 2000, 1900, 2000, 0.7, 'keep this history', 'COUNTING_DOWN', 'NO_ACTION_RECORDED')")
@@ -72,6 +125,7 @@ class RideSessionMigrationTest {
     private companion object {
         const val TEST_DB = "ride-session-migration-test"
         const val TEST_DB_V4 = "incident-history-migration-test"
+        const val TEST_DB_V5 = "sensor-event-migration-test"
         const val TEST_DB_V6 = "emergency-lifecycle-migration-test"
     }
 }

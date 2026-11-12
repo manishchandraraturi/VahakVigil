@@ -4,6 +4,7 @@ import com.manish.vahakvigil.domain.model.RawSensorEvent
 import com.manish.vahakvigil.domain.model.RawSensorType
 import com.manish.vahakvigil.domain.model.RecordedSensorEvent
 import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
 import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 import com.manish.vahakvigil.domain.repository.SensorEventRepository
 import java.io.ByteArrayOutputStream
@@ -208,7 +209,6 @@ class SensorCsvExporterTest {
         )
     }
 
-
     @Test
     fun `custom csvSessionIdentifier replaces internal session ID in output`() = runTest {
         val internalSessionId = "internal-ride-xyz-999"
@@ -297,6 +297,18 @@ class SensorCsvExporterTest {
             maximumPageSize = maxOf(maximumPageSize, page.size)
             return page
         }
+
+        override suspend fun getAnalysisPage(
+            sessionId: String,
+            maxEventId: Long,
+            after: SensorEventAnalysisCursor,
+            limit: Int
+        ): List<RecordedSensorEvent> = events[sessionId].orEmpty()
+            .asSequence()
+            .filter { it.eventId <= maxEventId && it.eventId > after.eventId }
+            .sortedBy { it.eventId }
+            .take(limit)
+            .toList()
     }
 
     private class CountingOutputStream : OutputStream() {

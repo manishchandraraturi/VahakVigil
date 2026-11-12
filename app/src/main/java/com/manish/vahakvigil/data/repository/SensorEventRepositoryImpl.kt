@@ -6,6 +6,7 @@ import com.manish.vahakvigil.domain.model.RawSensorEvent
 import com.manish.vahakvigil.domain.model.RawSensorType
 import com.manish.vahakvigil.domain.model.RecordedSensorEvent
 import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
 import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 import com.manish.vahakvigil.domain.repository.SensorEventRepository
 
@@ -46,6 +47,17 @@ class SensorEventRepositoryImpl(
             afterEventId = after?.eventId,
             limit = limit
         ).map { row -> RecordedSensorEvent(row.eventId, row.toRawEvent()) }
+    }
+
+    override suspend fun getAnalysisPage(
+        sessionId: String,
+        maxEventId: Long,
+        after: SensorEventAnalysisCursor,
+        limit: Int
+    ): List<RecordedSensorEvent> {
+        require(limit > 0) { "limit must be positive" }
+        return dao.getAnalysisPage(sessionId, maxEventId, after.eventId, limit)
+            .map { row -> RecordedSensorEvent(row.eventId, row.toRawEvent()) }
     }
 
     private fun RawSensorEvent.toEntity(sessionId: String) = SensorEventEntity(

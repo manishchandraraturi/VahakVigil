@@ -6,6 +6,12 @@ import com.manish.vahakvigil.domain.export.SensorCsvExportResult
 import com.manish.vahakvigil.domain.model.RideSession
 import com.manish.vahakvigil.domain.model.RideSessionPoint
 import com.manish.vahakvigil.domain.model.RideSessionStatus
+import com.manish.vahakvigil.domain.model.RawSensorEvent
+import com.manish.vahakvigil.domain.model.RecordedSensorEvent
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
+import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
+import com.manish.vahakvigil.domain.repository.SensorEventRepository
 import com.manish.vahakvigil.domain.repository.RideSessionRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +36,7 @@ class RideHistoryViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val exporter = FakeDocumentExport(eventCount = 3L)
-            val viewModel = RideHistoryViewModel(FakeRideRepository(), exporter)
+            val viewModel = newViewModel(exporter, StandardTestDispatcher(testScheduler))
             viewModel.loadDetail("ride-1")
             runCurrent()
             assertEquals(3L, viewModel.state.value.sensorEventCount)
@@ -52,7 +58,7 @@ class RideHistoryViewModelTest {
         try {
             val gate = CompletableDeferred<Unit>()
             val exporter = FakeDocumentExport(eventCount = 5L, gate = gate)
-            val viewModel = RideHistoryViewModel(FakeRideRepository(), exporter)
+            val viewModel = newViewModel(exporter, StandardTestDispatcher(testScheduler))
 
             viewModel.exportSensorCsv("ride-1", "content://selected/document")
             viewModel.exportSensorCsv("ride-1", "content://selected/document-2")
@@ -74,7 +80,7 @@ class RideHistoryViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val exporter = FakeDocumentExport(eventCount = 1L, failure = IllegalStateException("disk full"))
-            val viewModel = RideHistoryViewModel(FakeRideRepository(), exporter)
+            val viewModel = newViewModel(exporter, StandardTestDispatcher(testScheduler))
 
             viewModel.exportSensorCsv("ride-1", "content://selected/document")
             advanceUntilIdle()
@@ -86,6 +92,9 @@ class RideHistoryViewModelTest {
             Dispatchers.resetMain()
         }
     }
+
+    private fun newViewModel(exporter: SensorCsvDocumentExport, dispatcher: kotlinx.coroutines.CoroutineDispatcher) =
+        RideHistoryViewModel(FakeRideRepository(), exporter, EmptySensorEventRepository(), dispatcher)
 
     private class FakeDocumentExport(
         private val eventCount: Long,
@@ -127,5 +136,14 @@ class RideHistoryViewModelTest {
         override suspend fun finish(sessionId: String, endedAtEpochMillis: Long, interrupted: Boolean): Boolean = false
         override suspend fun getPoints(sessionId: String): List<RideSessionPoint> = emptyList()
         override suspend fun deleteSession(sessionId: String) = Unit
+    }
+
+    private class EmptySensorEventRepository : SensorEventRepository {
+        override suspend fun insertBatch(sessionId: String, events: List<RawSensorEvent>) = Unit
+        override suspend fun getEventsForSession(sessionId: String, limit: Int, offset: Int) = emptyList<RawSensorEvent>()
+        override suspend fun countForSession(sessionId: String) = 0L
+        override suspend fun getExportSnapshot(sessionId: String) = SensorEventExportSnapshot(0, 0)
+        override suspend fun getExportPage(sessionId: String, maxEventId: Long, after: SensorEventExportCursor?, limit: Int) = emptyList<RecordedSensorEvent>()
+        override suspend fun getAnalysisPage(sessionId: String, maxEventId: Long, after: SensorEventAnalysisCursor, limit: Int) = emptyList<RecordedSensorEvent>()
     }
 }

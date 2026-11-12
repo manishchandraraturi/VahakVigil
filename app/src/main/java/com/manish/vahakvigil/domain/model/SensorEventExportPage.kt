@@ -11,6 +11,9 @@ data class SensorEventExportCursor(
     val eventId: Long
 )
 
+/** Stable insertion-order cursor used to inspect recording-order quality without offset scans. */
+data class SensorEventAnalysisCursor(val eventId: Long)
+
 data class RecordedSensorEvent(
     val eventId: Long,
     val event: RawSensorEvent

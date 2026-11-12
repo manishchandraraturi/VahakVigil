@@ -5,6 +5,7 @@ import com.manish.vahakvigil.domain.model.RideSessionStatus
 import com.manish.vahakvigil.domain.repository.RideSessionRepository
 import com.manish.vahakvigil.domain.repository.SensorEventRepository
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +53,7 @@ class SensorSessionRecorder(
 ) {
     private val lifecycleMutex = Mutex()
     private val pendingCount = AtomicInteger(0)
+    private val receivedCount = AtomicLong(0)
     private val _diagnostics = MutableStateFlow(SensorRecordingDiagnostics())
     val diagnostics: StateFlow<SensorRecordingDiagnostics> = _diagnostics.asStateFlow()
 
@@ -92,6 +94,8 @@ class SensorSessionRecorder(
             activeSessionId = sessionId,
             sourceDroppedEventCount = source.droppedEventCount
         )
+        receivedCount.set(0)
+        pendingCount.set(0)
 
         val session = try {
             withContext(ioDispatcher) { rideSessionRepository.getSession(sessionId) }
@@ -191,6 +195,7 @@ class SensorSessionRecorder(
                 SensorRecordingStatus.IDLE
             },
             activeSessionId = null,
+            receivedEventCount = receivedCount.get(),
             pendingEventCount = 0,
             sourceDroppedEventCount = source.droppedEventCount
         ) }
@@ -198,19 +203,28 @@ class SensorSessionRecorder(
 
     private fun enqueue(event: RawSensorEvent) {
         val queue = eventQueue ?: run {
-            _diagnostics.update { it.copy(recorderDroppedEventCount = it.recorderDroppedEventCount + 1) }
+            _diagnostics.update {
+                it.copy(
+                    receivedEventCount = receivedCount.get(),
+                    recorderDroppedEventCount = it.recorderDroppedEventCount + 1,
+                    sourceDroppedEventCount = source.droppedEventCount
+                )
+            }
             return
         }
-        _diagnostics.update { it.copy(
-            receivedEventCount = it.receivedEventCount + 1,
-            sourceDroppedEventCount = source.droppedEventCount
-        ) }
+        receivedCount.incrementAndGet()
         pendingCount.incrementAndGet()
         if (queue.trySend(event).isFailure) {
-            pendingCount.decrementAndGet()
-            _diagnostics.update { it.copy(recorderDroppedEventCount = it.recorderDroppedEventCount + 1) }
+            val pending = pendingCount.decrementAndGet().coerceAtLeast(0)
+            _diagnostics.update {
+                it.copy(
+                    receivedEventCount = receivedCount.get(),
+                    pendingEventCount = pending,
+                    recorderDroppedEventCount = it.recorderDroppedEventCount + 1,
+                    sourceDroppedEventCount = source.droppedEventCount
+                )
+            }
         }
-        _diagnostics.update { it.copy(pendingEventCount = pendingCount.get()) }
     }
 
     private suspend fun writeBatches(sessionId: String, queue: Channel<RawSensorEvent>) {
@@ -228,13 +242,19 @@ class SensorSessionRecorder(
             throw cancellation
         } catch (error: Exception) {
             _diagnostics.update { it.copy(
+                receivedEventCount = receivedCount.get(),
                 status = SensorRecordingStatus.ERROR,
                 failedBatchCount = it.failedBatchCount + if (batch.isEmpty()) 0 else 1,
                 failedEventCount = it.failedEventCount + batch.size,
                 lastError = "Sensor event writer failed: ${error.messageOrType()}"
             ) }
             pendingCount.addAndGet(-batch.size)
-            _diagnostics.update { it.copy(pendingEventCount = pendingCount.get().coerceAtLeast(0)) }
+            _diagnostics.update {
+                it.copy(
+                    receivedEventCount = receivedCount.get(),
+                    pendingEventCount = pendingCount.get().coerceAtLeast(0)
+                )
+            }
         }
     }
 
@@ -245,12 +265,16 @@ class SensorSessionRecorder(
                 withContext(ioDispatcher) {
                     sensorEventRepository.insertBatch(sessionId, batch.toList())
                 }
-                _diagnostics.update { it.copy(
-                    persistedEventCount = it.persistedEventCount + batch.size,
-                    lastError = null
-                ) }
                 pendingCount.addAndGet(-batch.size)
-                _diagnostics.update { it.copy(pendingEventCount = pendingCount.get().coerceAtLeast(0)) }
+                _diagnostics.update {
+                    it.copy(
+                        receivedEventCount = receivedCount.get(),
+                        persistedEventCount = it.persistedEventCount + batch.size,
+                        pendingEventCount = pendingCount.get().coerceAtLeast(0),
+                        sourceDroppedEventCount = source.droppedEventCount,
+                        lastError = null
+                    )
+                }
                 return
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -263,14 +287,18 @@ class SensorSessionRecorder(
             }
         }
 
-        _diagnostics.update { it.copy(
-            status = SensorRecordingStatus.ERROR,
-            failedBatchCount = it.failedBatchCount + 1,
-            failedEventCount = it.failedEventCount + batch.size,
-            lastError = "Sensor event batch abandoned after bounded retries: ${lastError?.messageOrType()}"
-        ) }
         pendingCount.addAndGet(-batch.size)
-        _diagnostics.update { it.copy(pendingEventCount = pendingCount.get().coerceAtLeast(0)) }
+        _diagnostics.update {
+            it.copy(
+                receivedEventCount = receivedCount.get(),
+                status = SensorRecordingStatus.ERROR,
+                failedBatchCount = it.failedBatchCount + 1,
+                failedEventCount = it.failedEventCount + batch.size,
+                pendingEventCount = pendingCount.get().coerceAtLeast(0),
+                sourceDroppedEventCount = source.droppedEventCount,
+                lastError = "Sensor event batch abandoned after bounded retries: ${lastError?.messageOrType()}"
+            )
+        }
     }
 
     private fun setError(message: String) {

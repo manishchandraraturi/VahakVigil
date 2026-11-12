@@ -192,11 +192,18 @@ fun MapOverlayButton(label: String, modifier: Modifier = Modifier, onClick: () -
 }
 
 @Composable
-fun ActualRecordedRideMap(points: List<LatLng>, modifier: Modifier = Modifier) {
+fun ActualRecordedRideMap(points: List<LatLng>, modifier: Modifier = Modifier, progressIndex: Int? = null) {
     val colors = MaterialTheme.vahakColors
     val mapStyleJson = stringResource(if (MaterialTheme.colorScheme.primary == DarkAccentBlue) R.string.google_map_style_dark else R.string.google_map_style_light)
     val camera = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(points.firstOrNull() ?: LatLng(0.0, 0.0), 14f)
+    }
+    val replayPosition = progressIndex?.let(points::getOrNull)
+    val replayMarker = androidx.compose.runtime.remember(points) {
+        MarkerState(position = points.firstOrNull() ?: LatLng(0.0, 0.0))
+    }
+    LaunchedEffect(replayPosition) {
+        replayPosition?.let { replayMarker.position = it }
     }
     LaunchedEffect(points) {
         when (points.size) {
@@ -214,10 +221,21 @@ fun ActualRecordedRideMap(points: List<LatLng>, modifier: Modifier = Modifier) {
             val style = runCatching { com.google.android.gms.maps.model.MapStyleOptions(mapStyleJson) }.getOrNull()
             map.setMapStyle(style)
         }
-        if (points.size > 1) Polyline(points, color = colors.primary, width = 8f)
+        if (points.size > 1) {
+            if (progressIndex == null) {
+                Polyline(points, color = colors.primary, width = 8f)
+            } else {
+                Polyline(points, color = colors.divider, width = 6f)
+                val traveled = points.take((progressIndex + 1).coerceAtMost(points.size))
+                if (traveled.size > 1) Polyline(traveled, color = colors.primary, width = 9f)
+            }
+        }
         points.firstOrNull()?.let { Marker(MarkerState(it), title = stringResource(R.string.ride_start_marker)) }
         points.lastOrNull()?.takeIf { points.size > 1 }?.let {
             Marker(MarkerState(it), title = stringResource(R.string.ride_end_marker))
+        }
+        replayPosition?.let {
+            Marker(state = replayMarker, title = stringResource(R.string.ride_replay_position_marker))
         }
     }
 }

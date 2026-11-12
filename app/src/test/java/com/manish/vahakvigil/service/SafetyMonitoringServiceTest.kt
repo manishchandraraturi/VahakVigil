@@ -18,6 +18,7 @@ import com.manish.vahakvigil.domain.model.RideSessionPoint
 import com.manish.vahakvigil.domain.model.RideSessionStatus
 import com.manish.vahakvigil.domain.model.RecordedSensorEvent
 import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
 import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 import com.manish.vahakvigil.domain.pipeline.CrashDetectionPipeline
 import com.manish.vahakvigil.domain.repository.RideSessionRepository
@@ -611,6 +612,12 @@ class SafetyMonitoringServiceTest {
             sessionId: String,
             maxEventId: Long,
             after: SensorEventExportCursor?,
+            limit: Int
+        ): List<RecordedSensorEvent> = emptyList()
+        override suspend fun getAnalysisPage(
+            sessionId: String,
+            maxEventId: Long,
+            after: SensorEventAnalysisCursor,
             limit: Int
         ): List<RecordedSensorEvent> = emptyList()
     }

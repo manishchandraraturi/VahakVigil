@@ -7,6 +7,7 @@ import com.manish.vahakvigil.domain.model.RideSessionPoint
 import com.manish.vahakvigil.domain.model.RideSessionStatus
 import com.manish.vahakvigil.domain.model.RecordedSensorEvent
 import com.manish.vahakvigil.domain.model.SensorEventExportCursor
+import com.manish.vahakvigil.domain.model.SensorEventAnalysisCursor
 import com.manish.vahakvigil.domain.model.SensorEventExportSnapshot
 import com.manish.vahakvigil.domain.repository.RideSessionRepository
 import com.manish.vahakvigil.domain.repository.SensorEventRepository
@@ -271,6 +272,18 @@ class SensorSessionRecorderTest {
             .filter { row -> after == null || row.event.timestampNanos > after.timestampNanos ||
                 (row.event.timestampNanos == after.timestampNanos && row.eventId > after.eventId) }
             .sortedWith(compareBy<RecordedSensorEvent> { it.event.timestampNanos }.thenBy { it.eventId })
+            .take(limit)
+            .toList()
+
+        override suspend fun getAnalysisPage(
+            sessionId: String,
+            maxEventId: Long,
+            after: SensorEventAnalysisCursor,
+            limit: Int
+        ): List<RecordedSensorEvent> = events[sessionId].orEmpty()
+            .asSequence()
+            .filter { it.eventId <= maxEventId && it.eventId > after.eventId }
+            .sortedBy { it.eventId }
             .take(limit)
             .toList()
     }

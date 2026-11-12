@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Button
+import androidx.compose.material3.Slider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,7 +29,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,6 +50,15 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.manish.vahakvigil.R
 import com.manish.vahakvigil.domain.model.RideSession
 import com.manish.vahakvigil.domain.model.RideSessionStatus
+import com.manish.vahakvigil.domain.analysis.SensorAnalysisProgress
+import com.manish.vahakvigil.domain.location.RecordedRoutePlayback
+import com.manish.vahakvigil.domain.model.RideRecordingCompleteness
+import com.manish.vahakvigil.domain.model.RideRecordingCompletenessPolicy
+import com.manish.vahakvigil.domain.model.SensorRecordingAnalysis
+import com.manish.vahakvigil.domain.model.SensorStreamAnalysis
+import com.manish.vahakvigil.domain.model.SensorStreamType
+import com.manish.vahakvigil.domain.model.SensorTimelineBucket
+import kotlin.math.roundToInt
 import com.manish.vahakvigil.domain.export.SensorCsvExporter
 import com.manish.vahakvigil.ui.screens.ridehistory.SensorCsvExportStatus
 import com.manish.vahakvigil.ui.components.AppCard
@@ -155,7 +172,21 @@ fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClic
                 Text(DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(session.startedAtEpochMillis)), color = MaterialTheme.vahakColors.headingText, fontSize = 21.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold)
                 Text(statusText(session.status), color = MaterialTheme.vahakColors.mutedText)
                 Spacer(Modifier.height(12.dp))
-                RecordedRideMap(state.selectedPoints.map { LatLng(it.latitude, it.longitude) }, Modifier.fillMaxWidth())
+                val recordedRoute = remember(state.selectedPoints) { state.selectedPoints.map { LatLng(it.latitude, it.longitude) } }
+                RecordedRideMap(recordedRoute, Modifier.fillMaxWidth(), state.routePlaybackIndex)
+                if (state.selectedPoints.size >= 2) {
+                    val replayProgress = RecordedRoutePlayback.progressForIndex(state.routePlaybackIndex, state.selectedPoints.size)
+                    Spacer(Modifier.height(8.dp))
+                    RouteReplayControls(
+                        progress = replayProgress,
+                        isPlaying = state.routeIsPlaying,
+                        pointCount = state.selectedPoints.size,
+                        pointIndex = state.routePlaybackIndex ?: 0,
+                        onPlay = viewModel::playRoute,
+                        onPause = viewModel::pauseRoutePlayback,
+                        onSeek = viewModel::seekRoute
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 RideMetricGrid(
                     listOf(
@@ -164,6 +195,15 @@ fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClic
                         androidx.compose.ui.res.stringResource(R.string.ride_average_speed) to (session.averageSpeedMetersPerSecond?.let { String.format(Locale.getDefault(), "%.1f km/h", it * 3.6) } ?: androidx.compose.ui.res.stringResource(R.string.ride_metric_unavailable)),
                         androidx.compose.ui.res.stringResource(R.string.ride_maximum_speed) to (session.maximumSpeedMetersPerSecond?.let { String.format(Locale.getDefault(), "%.1f km/h", it * 3.6) } ?: androidx.compose.ui.res.stringResource(R.string.ride_metric_unavailable))
                     )
+                )
+                Spacer(Modifier.height(12.dp))
+                RideIntelligenceSection(
+                    session = session,
+                    gpsPointCount = state.selectedPoints.size,
+                    analysis = state.sensorAnalysis,
+                    isLoading = state.sensorAnalysisLoading,
+                    progress = state.sensorAnalysisProgress,
+                    hasError = state.sensorAnalysisError
                 )
                 Spacer(Modifier.height(12.dp))
                 AppCard(Modifier.fillMaxWidth(), cornerRadius = 20.dp) {
@@ -258,6 +298,200 @@ fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClic
 }
 
 @Composable
+private fun RouteReplayControls(
+    progress: Float,
+    isPlaying: Boolean,
+    pointCount: Int,
+    pointIndex: Int,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onSeek: (Float) -> Unit
+) {
+    AppCard(Modifier.fillMaxWidth(), cornerRadius = 18.dp) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(stringResource(R.string.ride_route_replay_title), color = MaterialTheme.vahakColors.headingText, fontWeight = FontWeight.SemiBold)
+                Button(onClick = if (isPlaying) onPause else onPlay, enabled = pointCount > 1) {
+                    Text(stringResource(if (isPlaying) R.string.ride_replay_pause else R.string.ride_replay_play))
+                }
+            }
+            Text(
+                stringResource(R.string.ride_replay_position, pointIndex + 1, pointCount, (progress * 100f).roundToInt()),
+                color = MaterialTheme.vahakColors.mutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Slider(value = progress, onValueChange = onSeek, enabled = pointCount > 1)
+        }
+    }
+}
+
+@Composable
+private fun RideIntelligenceSection(
+    session: RideSession,
+    gpsPointCount: Int,
+    analysis: SensorRecordingAnalysis?,
+    isLoading: Boolean,
+    progress: SensorAnalysisProgress?,
+    hasError: Boolean
+) {
+    AppCard(Modifier.fillMaxWidth(), cornerRadius = 22.dp) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.ride_intelligence_title), color = MaterialTheme.vahakColors.headingText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            if (isLoading) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { progress?.fraction ?: 0f },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    stringResource(
+                        R.string.ride_analysis_loading,
+                        progress?.processedEvents ?: 0L,
+                        ((progress?.totalEvents ?: 0L) * 2L)
+                    ),
+                    color = MaterialTheme.vahakColors.mutedText,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (hasError) {
+                Text(stringResource(R.string.ride_analysis_error), color = MaterialTheme.colorScheme.error)
+            } else if (analysis == null || analysis.totalEventCount == 0L) {
+                Text(stringResource(R.string.ride_analysis_empty), color = MaterialTheme.vahakColors.mutedText)
+                Text(stringResource(R.string.ride_analysis_timestamp_note), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+            } else {
+                val accelerometerCount = analysis.accelerometer?.eventCount ?: 0L
+                val gyroscopeCount = analysis.gyroscope?.eventCount ?: 0L
+                RideMetricGrid(
+                    listOf(
+                        stringResource(R.string.ride_analysis_gps_points) to gpsPointCount.toString(),
+                        stringResource(R.string.ride_analysis_accel_events) to accelerometerCount.toString(),
+                        stringResource(R.string.ride_analysis_gyro_events) to gyroscopeCount.toString(),
+                        stringResource(R.string.ride_analysis_recording) to stringResource(
+                            when (RideRecordingCompletenessPolicy.evaluate(session.status, gpsPointCount, accelerometerCount, gyroscopeCount)) {
+                                RideRecordingCompleteness.COMPLETE -> R.string.ride_analysis_complete
+                                RideRecordingCompleteness.PARTIAL -> R.string.ride_analysis_partial
+                                RideRecordingCompleteness.NO_SENSOR_DATA -> R.string.ride_analysis_no_sensor_data
+                            }
+                        )
+                    )
+                )
+                Text(stringResource(R.string.ride_analysis_measured_derived_note), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ride_analysis_timestamp_note), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+                if (analysis.accelerometer == null) {
+                    Text(stringResource(R.string.ride_analysis_missing_accelerometer), color = MaterialTheme.vahakColors.mutedText)
+                } else {
+                    SensorStreamCard(analysis.accelerometer!!)
+                }
+                if (analysis.gyroscope == null) {
+                    Text(stringResource(R.string.ride_analysis_missing_gyroscope), color = MaterialTheme.vahakColors.mutedText)
+                } else {
+                    SensorStreamCard(analysis.gyroscope!!)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SensorStreamCard(stream: SensorStreamAnalysis) {
+    val title = stringResource(if (stream.type == SensorStreamType.ACCELEROMETER) R.string.ride_analysis_accelerometer else R.string.ride_analysis_gyroscope)
+    val units = stringResource(if (stream.type == SensorStreamType.ACCELEROMETER) R.string.ride_analysis_acceleration_units else R.string.ride_analysis_angular_units)
+    val magnitudeDescription = stringResource(
+        if (stream.type == SensorStreamType.ACCELEROMETER) R.string.ride_analysis_accel_magnitude_note else R.string.ride_analysis_gyro_magnitude_note
+    )
+    val peak = stream.peakMagnitude?.let { String.format(Locale.getDefault(), "%.3f", it) } ?: stringResource(R.string.ride_metric_unavailable)
+    val average = stream.averageMagnitude?.let { String.format(Locale.getDefault(), "%.3f", it) } ?: stringResource(R.string.ride_metric_unavailable)
+    val minInterval = stream.minimumSampleIntervalMillis?.let { String.format(Locale.getDefault(), "%.2f ms", it) } ?: "—"
+    val medianInterval = stream.medianSampleIntervalMillisApprox?.let { String.format(Locale.getDefault(), "%.2f ms", it) } ?: "—"
+    val maxInterval = stream.maximumSampleIntervalMillis?.let { String.format(Locale.getDefault(), "%.2f ms", it) } ?: "—"
+    AppCard(Modifier.fillMaxWidth(), cornerRadius = 18.dp) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, color = MaterialTheme.vahakColors.headingText, fontWeight = FontWeight.Bold)
+            Text(units, color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+            Text(magnitudeDescription, color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.ride_analysis_peak_magnitude), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.labelSmall)
+                    Text("$peak $units", color = MaterialTheme.vahakColors.headingText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.ride_analysis_average_magnitude), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.labelSmall)
+                    Text("$average $units", color = MaterialTheme.vahakColors.headingText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Text(
+                stringResource(R.string.ride_analysis_intervals, minInterval, medianInterval, maxInterval),
+                color = MaterialTheme.vahakColors.mutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+            stream.sampleFrequencyHzApprox?.let {
+                Text(stringResource(R.string.ride_analysis_frequency, String.format(Locale.getDefault(), "%.1f", it)), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                stringResource(R.string.ride_analysis_quality_counts, stream.duplicateTimestampCount, stream.nonMonotonicTimestampCount, stream.irregularGapCount, stream.missingAccuracyCount, stream.nonFiniteValueCount),
+                color = MaterialTheme.vahakColors.mutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(stringResource(R.string.ride_analysis_gap_definition), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+            if (stream.timeline.isNotEmpty()) SensorTimelineChart(stream)
+            else Text(stringResource(R.string.ride_analysis_chart_unavailable), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun SensorTimelineChart(stream: SensorStreamAnalysis) {
+    val timeline = stream.timeline
+    var selectedFraction by remember(stream.type, timeline) { mutableFloatStateOf(0f) }
+    val selectedIndex = (selectedFraction * (timeline.lastIndex.coerceAtLeast(0))).roundToInt().coerceIn(0, timeline.lastIndex)
+    val selected = timeline[selectedIndex].selectedSample
+    val chartDescription = stringResource(R.string.ride_analysis_chart_accessibility)
+    val xColor = Color(0xFFE57373)
+    val yColor = Color(0xFF66BB6A)
+    val zColor = Color(0xFF64B5F6)
+    val gridColor = MaterialTheme.vahakColors.divider.copy(alpha = 0.45f)
+    Canvas(
+        Modifier.fillMaxWidth().height(150.dp).semantics { contentDescription = chartDescription }
+    ) {
+        val minValue = timeline.minOf { minOf(it.minX, it.minY, it.minZ) }.toDouble()
+        val maxValue = timeline.maxOf { maxOf(it.maxX, it.maxY, it.maxZ) }.toDouble()
+        val padding = 8.dp.toPx()
+        val graphHeight = (size.height - padding * 2f).coerceAtLeast(1f)
+        val graphWidth = size.width.coerceAtLeast(1f)
+        val span = (maxValue - minValue).takeIf { it > 0.0 } ?: 1.0
+        for (line in 0..4) {
+            val y = padding + graphHeight * line / 4f
+            drawLine(gridColor, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(graphWidth, y), 1.dp.toPx())
+        }
+        val duration = timeline.last().endOffsetSeconds.takeIf { it > 0.0 } ?: 1.0
+        timeline.forEach { bucket ->
+            val x = (((bucket.startOffsetSeconds + bucket.endOffsetSeconds) / 2.0) / duration * graphWidth).toFloat().coerceIn(0f, graphWidth)
+            fun yFor(value: Float) = padding + graphHeight - (((value - minValue) / span).toFloat() * graphHeight)
+            drawLine(xColor, androidx.compose.ui.geometry.Offset(x, yFor(bucket.maxX)), androidx.compose.ui.geometry.Offset(x, yFor(bucket.minX)), 2.dp.toPx())
+            drawLine(yColor, androidx.compose.ui.geometry.Offset(x, yFor(bucket.maxY)), androidx.compose.ui.geometry.Offset(x, yFor(bucket.minY)), 2.dp.toPx())
+            drawLine(zColor, androidx.compose.ui.geometry.Offset(x, yFor(bucket.maxZ)), androidx.compose.ui.geometry.Offset(x, yFor(bucket.minZ)), 2.dp.toPx())
+        }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("X", color = xColor, style = MaterialTheme.typography.labelSmall)
+        Text("Y", color = yColor, style = MaterialTheme.typography.labelSmall)
+        Text("Z", color = zColor, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.weight(1f))
+        Text(stringResource(R.string.ride_analysis_timeline_seconds, String.format(Locale.getDefault(), "%.1f", timeline.last().endOffsetSeconds)), color = MaterialTheme.vahakColors.mutedText, style = MaterialTheme.typography.labelSmall)
+    }
+    Slider(
+        value = selectedFraction,
+        onValueChange = { selectedFraction = it },
+        enabled = timeline.size > 1,
+        modifier = Modifier.fillMaxWidth()
+    )
+    val elapsedSeconds = (selected.timestampNanos - stream.minimumTimestampNanos).coerceAtLeast(0L) / 1_000_000_000.0
+    Text(
+        stringResource(R.string.ride_analysis_selected_sample, selected.timestampNanos, String.format(Locale.US, "%.3f", elapsedSeconds), selected.x.toString(), selected.y.toString(), selected.z.toString(), selected.accuracy),
+        color = MaterialTheme.vahakColors.mutedText,
+        style = MaterialTheme.typography.bodySmall
+    )
+}
+
+@Composable
 fun RideCompletionScreen(
     viewModel: RideHistoryViewModel,
     onHome: () -> Unit,
@@ -323,7 +557,7 @@ fun RideCompletionScreen(
 }
 
 @Composable
-private fun RecordedRideMap(points: List<LatLng>, modifier: Modifier) {
+private fun RecordedRideMap(points: List<LatLng>, modifier: Modifier, progressIndex: Int? = null) {
     val context = LocalContext.current
     val configured = remember(context) { GoogleMapsConfiguration.isApiKeyConfigured(context) }
     if (!configured) {
@@ -360,7 +594,7 @@ private fun RecordedRideMap(points: List<LatLng>, modifier: Modifier) {
         }
         return
     }
-    ActualRecordedRideMap(points, modifier.fillMaxWidth().height(230.dp))
+    ActualRecordedRideMap(points, modifier.fillMaxWidth().height(230.dp), progressIndex)
 }
 
 @Composable
