@@ -83,6 +83,23 @@ class VahakVigilApp : Application() {
         com.manish.vahakvigil.data.export.AndroidSensorCsvDocumentExporter(contentResolver, sensorCsvExporter)
     }
 
+    val datasetContributionConsent by lazy {
+        com.manish.vahakvigil.domain.export.DatasetContributionConsent(
+            com.manish.vahakvigil.data.preferences.DatasetContributionPreferences(this)
+        )
+    }
+
+    val sensorDatasetPackageExporter: com.manish.vahakvigil.domain.export.SensorDatasetPackageExport by lazy {
+        com.manish.vahakvigil.data.export.AndroidSensorDatasetPackageExporter(
+            context = this,
+            contentResolver = contentResolver,
+            sensorEvents = sensorEventRepository,
+            rides = rideSessionRepository,
+            csvExporter = sensorCsvExporter,
+            consent = datasetContributionConsent
+        )
+    }
+
     val sensorSessionRecorder: com.manish.vahakvigil.data.sensor.SensorSessionRecorder by lazy {
         com.manish.vahakvigil.data.sensor.SensorSessionRecorder(
             source = rawSensorEventSource,

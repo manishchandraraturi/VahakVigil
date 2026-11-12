@@ -118,6 +118,15 @@ fun RideHistoryScreen(
                     }
                 }
         }
+        Spacer(Modifier.height(24.dp))
+        val app = LocalContext.current.applicationContext as? com.manish.vahakvigil.VahakVigilApp
+        if (app != null) {
+            DatasetContributionSection(
+                rides = state.sessions,
+                consent = app.datasetContributionConsent,
+                exporter = app.sensorDatasetPackageExporter
+            )
+        }
     }
     deleteTarget?.let { session ->
         AlertDialog(
@@ -290,6 +299,15 @@ fun RideDetailScreen(viewModel: RideHistoryViewModel, rideId: String, onBackClic
                             )
                         }
                     }
+                }
+                Spacer(Modifier.height(12.dp))
+                val app = LocalContext.current.applicationContext as? com.manish.vahakvigil.VahakVigilApp
+                if (app != null) {
+                    DatasetContributionSection(
+                        rides = listOf(session),
+                        consent = app.datasetContributionConsent,
+                        exporter = app.sensorDatasetPackageExporter
+                    )
                 }
                 if (state.selectedPoints.isEmpty()) Text(androidx.compose.ui.res.stringResource(R.string.ride_no_gps_points), color = MaterialTheme.vahakColors.mutedText)
             }
